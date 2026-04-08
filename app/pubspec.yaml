@@ -41,6 +41,9 @@ dependencies:
   # Permission handling for microphone and camera access
   permission_handler: ^12.0.1
 
+  # HTTP client for API requests
+  http: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

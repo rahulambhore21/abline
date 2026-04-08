@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:math';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'speaker_tracker.dart';
+import 'speaking_event.dart';
 
 class VoiceCallScreen extends StatefulWidget {
   const VoiceCallScreen({super.key});
@@ -14,42 +18,61 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   // Agora engine instance
   late RtcEngine _agoraEngine;
 
+  // Speaker tracking
+  late SpeakerTracker _speakerTracker;
+
   // Channel and user settings
   final String _channelName = 'test_room';
   final String _agoraAppId = '1400d886612b4896986d7db16b0bbc44';
-  int _uid = 0; // Local user ID (0 = let Agora assign)
-  int _remoteUid = 0; // Remote user ID
+  final String _backendUrl = 'https://dallas-velocity-feelings-maritime.trycloudflare.com';
+  int _uid = 0;
+  int _remoteUid = 0;
+  String? _agoraToken;
 
   // UI state
   bool _isConnected = false;
   bool _isJoining = false;
-  List<int> _remoteUsers = []; // List of remote user IDs
+  List<int> _remoteUsers = [];
   String _statusMessage = 'Disconnected';
+  List<SpeakingEvent> _speakingEvents = [];
+
+  // Debug: set true if you want continuous UID+volume logs.
+  // This can be noisy (prints every ~200ms per active speaker).
+  final bool _logVolumes = true;
 
   @override
   void initState() {
     super.initState();
+    _speakerTracker = SpeakerTracker(
+      backendUrl: _backendUrl,
+      sessionId: _channelName.hashCode,
+      onSpeakingEventComplete: (event) {
+        setState(() {
+          _speakingEvents.add(event);
+        });
+        print('✅ Speaking event completed and sent to backend: $event');
+      },
+    );
     _initializeAgora();
   }
 
   /// Initialize Agora RTC Engine
   Future<void> _initializeAgora() async {
     try {
-      // Request microphone permission
       await _requestMicrophonePermission();
-
-      // Create Agora RTC Engine
       _agoraEngine = createAgoraRtcEngine();
-
-      // Initialize the engine with your App ID
       await _agoraEngine.initialize(
         RtcEngineContext(appId: _agoraAppId),
       );
-
-      // Enable audio module (audio-only, no video)
       await _agoraEngine.enableAudio();
 
-      // Set event handlers to listen for channel events
+      // Enable audio volume indication with reportVad
+      await _agoraEngine.enableAudioVolumeIndication(
+        interval: 200,
+        smooth: 3,
+        reportVad: true,
+      );
+
       _setupEventHandlers();
 
       setState(() {
@@ -61,13 +84,53 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  /// Request microphone permission from the user
+  /// Request microphone permission
   Future<void> _requestMicrophonePermission() async {
     final status = await Permission.microphone.request();
-
     if (!status.isGranted) {
       _showErrorSnackBar('Microphone permission is required for voice calls');
       throw Exception('Microphone permission denied');
+    }
+  }
+
+  /// Fetch Agora token from backend
+  Future<void> _fetchAgoraToken() async {
+    try {
+      if (_uid == 0) {
+        _uid = Random().nextInt(100000) + 1;
+      }
+
+      final url = Uri.parse(
+        '$_backendUrl/agora/token?channelName=$_channelName&uid=$_uid',
+      );
+
+      print('Fetching token from: $url');
+
+      final response = await http.get(url).timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          throw Exception('Token request timeout - is backend running on $_backendUrl?');
+        },
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _agoraToken = data['token'];
+          _statusMessage = 'Token obtained successfully';
+        });
+        print('✅ Token fetched: ${_agoraToken?.substring(0, 20)}...');
+      } else {
+        final error = jsonDecode(response.body)['error'] ?? 'Unknown error';
+        throw Exception('Failed to get token: $error (${response.statusCode})');
+      }
+    } catch (e) {
+      print('❌ Error fetching token: $e');
+      _showErrorSnackBar('Failed to fetch token: $e');
+      setState(() {
+        _statusMessage = 'Failed to fetch token';
+      });
+      rethrow;
     }
   }
 
@@ -75,9 +138,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   void _setupEventHandlers() {
     _agoraEngine.registerEventHandler(
       RtcEngineEventHandler(
-        // Called when local user joins the channel
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           print('Local user ${connection.localUid} joined successfully');
+          // Start tracker timers once we are actually in-channel.
+          _speakerTracker.start();
           setState(() {
             _uid = connection.localUid ?? 0;
             _isConnected = true;
@@ -85,7 +149,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           });
         },
 
-        // Called when a remote user joins the channel
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           print('Remote user $remoteUid joined');
           setState(() {
@@ -95,10 +158,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           });
         },
 
-        // Called when a remote user leaves the channel
         onUserOffline: (RtcConnection connection, int remoteUid,
             UserOfflineReasonType reason) {
           print('Remote user $remoteUid left');
+          _speakerTracker.removeUser(remoteUid);
           setState(() {
             _remoteUsers.remove(remoteUid);
             if (_remoteUid == remoteUid) {
@@ -108,7 +171,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           });
         },
 
-        // Called when connection state changes
         onConnectionStateChanged: (RtcConnection connection,
             ConnectionStateType state, ConnectionChangedReasonType reason) {
           print('Connection state changed to: $state');
@@ -117,7 +179,32 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           }
         },
 
-        // Called when an error occurs
+        // Audio volume indication handler - 4 parameters: connection, speakers, totalVolume, publishVolume
+        onAudioVolumeIndication:
+            (connection, speakers, totalVolume, publishVolume) {
+          final now = DateTime.now();
+
+          // Logs show UID + volume values continuously (helps verify detection in real time)
+          for (final speaker in speakers) {
+            final uid = speaker.uid ?? 0;
+            final volume = speaker.volume ?? 0;
+            // final vad = speaker.vad ?? 0; // available if you want to log VAD
+
+            if (_logVolumes) {
+              print('🔊 volume uid=$uid volume=$volume');
+            }
+
+            _speakerTracker.processAudioVolume(
+              uid: uid,
+              volume: volume,
+              at: now,
+            );
+          }
+
+          // End "stuck speaking" users if SDK stops reporting them once they go silent.
+          _speakerTracker.tick(now: now);
+        },
+
         onError: (ErrorCodeType err, String msg) {
           print('Error occurred: $err - $msg');
           _showErrorSnackBar('Error: $msg');
@@ -132,28 +219,26 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
     setState(() {
       _isJoining = true;
-      _statusMessage = 'Joining channel...';
+      _statusMessage = 'Fetching token...';
     });
 
     try {
-      // Generate a random UID if not already set
-      if (_uid == 0) {
-        _uid = Random().nextInt(100000) + 1;
+      await _fetchAgoraToken();
+
+      if (_agoraToken == null) {
+        throw Exception('Token is null after fetching');
       }
 
-      // Join the channel with:
-      // - token: null (temporary, for testing without a token server)
-      // - channelId: the channel name
-      // - uid: local user ID
-      // - options: channel configuration
+      print('Joining channel: $_channelName with UID: $_uid');
+
       await _agoraEngine.joinChannel(
-        token: '007eJxTYEiOvL+Ta310792kKZ/+/8g8Z8Rp+rsyMsL+7NuyOS3dF+IVGAxNDAxSLCzMzAyNkkwsLM0sLcxSzFOSDM2SDJKSkk1M/i66ltkQyMgwqVqIhZEBAkF8ToaS1OKS+KL8/FwGBgCjjCPK',
+        token: _agoraToken!,
         channelId: _channelName,
         uid: _uid,
         options: ChannelMediaOptions(
-          autoSubscribeAudio: true, // Auto-subscribe to remote audio
-          publishMicrophoneTrack: true, // Publish local microphone
-          clientRoleType: ClientRoleType.clientRoleBroadcaster, // Broadcaster role
+          autoSubscribeAudio: true,
+          publishMicrophoneTrack: true,
+          clientRoleType: ClientRoleType.clientRoleBroadcaster,
         ),
       );
 
@@ -177,8 +262,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         _statusMessage = 'Leaving channel...';
       });
 
-      // Leave the channel
       await _agoraEngine.leaveChannel();
+      _speakerTracker.reset(); // also stops internal timers
 
       setState(() {
         _isConnected = false;
@@ -192,7 +277,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  /// Show error message as a snackbar
+  /// Show error message
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -205,8 +290,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   @override
   void dispose() {
-    // Leave channel and destroy engine on widget dispose
     _leaveChannelAndDestroy();
+    _speakerTracker.dispose();
     super.dispose();
   }
 
@@ -216,7 +301,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       if (_isConnected) {
         await _agoraEngine.leaveChannel();
       }
-      // Destroy the Agora engine to release resources
       await _agoraEngine.release();
     } catch (e) {
       print('Error destroying engine: $e');
@@ -265,31 +349,55 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Remote users section
-          if (_remoteUsers.isNotEmpty)
+          // Users with speaking indicators (always show when connected)
+          if (_isConnected)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Remote Users:',
+                    'Users in Call:',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                   ),
                   const SizedBox(height: 8),
                   Container(
-                    padding: const EdgeInsets.all(8.0),
+                    padding: const EdgeInsets.all(12.0),
                     decoration: BoxDecoration(
                       border: Border.all(color: Colors.grey),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Column(
-                      children: _remoteUsers.map((uid) {
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 4.0),
-                          child: Text('• User ID: $uid'),
-                        );
-                      }).toList(),
+                      children: [
+                        _buildUserIndicator(
+                          uid: _uid,
+                          label: 'You',
+                          isLocal: true,
+                        ),
+                        const SizedBox(height: 12),
+                        if (_remoteUsers.isEmpty)
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              'Waiting for others to join...',
+                              style: TextStyle(fontSize: 12, color: Colors.grey),
+                            ),
+                          )
+                        else
+                          ..._remoteUsers.map((uid) {
+                            return Column(
+                              children: [
+                                _buildUserIndicator(
+                                  uid: uid,
+                                  label: 'User $uid',
+                                  isLocal: false,
+                                ),
+                                if (uid != _remoteUsers.last)
+                                  const SizedBox(height: 12),
+                              ],
+                            );
+                          }).toList(),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -297,7 +405,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               ),
             ),
 
-          // Main content area
+          // Main content
           Expanded(
             child: Center(
               child: Column(
@@ -329,12 +437,45 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             ),
           ),
 
+          // Speaking events history
+          if (_speakingEvents.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12.0),
+              color: Colors.blue.shade50,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Speaking Events:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
+                  const SizedBox(height: 8),
+                  SizedBox(
+                    height: 60,
+                    child: ListView.builder(
+                      itemCount: _speakingEvents.length,
+                      itemBuilder: (context, index) {
+                        final event = _speakingEvents[index];
+                        final duration = event.endTime.difference(event.startTime).inSeconds;
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4.0),
+                          child: Text(
+                            '🎤 User ${event.userId}: ${duration}s',
+                            style: const TextStyle(fontSize: 11),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
           // Action buttons
           Padding(
             padding: const EdgeInsets.all(24.0),
             child: Row(
               children: [
-                // Leave button
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _isConnected ? _leaveChannel : null,
@@ -349,8 +490,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                   ),
                 ),
                 const SizedBox(width: 16),
-
-                // Join button
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: !_isConnected && !_isJoining ? _joinChannel : null,
@@ -369,6 +508,73 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  /// Build user indicator widget
+  Widget _buildUserIndicator({
+    required int uid,
+    required String label,
+    required bool isLocal,
+  }) {
+    return ValueListenableBuilder<Map<int, UserSpeakingState>>(
+      valueListenable: _speakerTracker.speakingStatesNotifier,
+      builder: (context, speakingStates, _) {
+        final userState = speakingStates[uid];
+        final isSpeaking = userState?.isSpeaking ?? false;
+
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+          decoration: BoxDecoration(
+            color: isSpeaking ? Colors.green.shade50 : Colors.grey.shade50,
+            border: Border.all(
+              color: isSpeaking ? Colors.green : Colors.grey.shade300,
+              width: 2,
+            ),
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 16,
+                height: 16,
+                decoration: BoxDecoration(
+                  color: isSpeaking ? Colors.green : Colors.grey.shade300,
+                  shape: BoxShape.circle,
+                ),
+                child: isSpeaking
+                    ? const Icon(Icons.mic, size: 10, color: Colors.white)
+                    : null,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: isSpeaking ? Colors.green.shade700 : Colors.grey.shade700,
+                      ),
+                    ),
+                    if (isSpeaking)
+                      const Text(
+                        '🎤 Speaking...',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.green,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }
