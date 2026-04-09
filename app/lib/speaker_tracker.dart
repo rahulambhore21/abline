@@ -39,7 +39,7 @@ class SpeakerTracker {
 
   final OnSpeakingEventComplete? onSpeakingEventComplete;
   final String backendUrl;
-  final int sessionId;
+  final String sessionId;
 
   // ValueNotifier for UI updates (listening widgets rebuild when speaking state changes)
   final ValueNotifier<Map<int, UserSpeakingState>> speakingStatesNotifier;

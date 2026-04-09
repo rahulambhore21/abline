@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'speaker_tracker.dart';
 import 'speaking_event.dart';
+import 'app_config.dart';
 
 class VoiceCallScreen extends StatefulWidget {
   const VoiceCallScreen({super.key});
@@ -24,7 +25,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   // Channel and user settings
   final String _channelName = 'test_room';
   final String _agoraAppId = '1400d886612b4896986d7db16b0bbc44';
-  final String _backendUrl = 'https://dallas-velocity-feelings-maritime.trycloudflare.com';
+  // Backend base URL (centralized in AppConfig)
+  late final String _backendUrl = AppConfig.backendBaseUrl;
   int _uid = 0;
   int _remoteUid = 0;
   String? _agoraToken;
@@ -45,7 +47,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     super.initState();
     _speakerTracker = SpeakerTracker(
       backendUrl: _backendUrl,
-      sessionId: _channelName.hashCode,
+      sessionId: _channelName,
       onSpeakingEventComplete: (event) {
         setState(() {
           _speakingEvents.add(event);

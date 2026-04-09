@@ -44,6 +44,12 @@ dependencies:
   # HTTP client for API requests
   http: ^1.1.0
 
+  # Audio playback for recordings
+  just_audio: ^0.9.36
+
+  # Local storage for JWT token and user preferences
+  shared_preferences: ^2.2.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
