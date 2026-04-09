@@ -7,7 +7,7 @@
 class AppConfig {
   static const String backendUrl = String.fromEnvironment(
     'BACKEND_URL',
-    defaultValue: 'https://endorsed-wax-ent-saving.trycloudflare.com',
+    defaultValue: 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud',
   );
 
   /// Normalized base URL with no trailing slash.
