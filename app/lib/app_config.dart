@@ -15,6 +15,7 @@ class AppConfig {
     if (backendUrl.endsWith('/')) {
       return backendUrl.substring(0, backendUrl.length - 1);
     }
+     
     return backendUrl;
   }
 }

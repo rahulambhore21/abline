@@ -16,31 +16,27 @@ class VoiceCallScreen extends StatefulWidget {
 }
 
 class _VoiceCallScreenState extends State<VoiceCallScreen> {
-  // Agora engine instance
   late RtcEngine _agoraEngine;
-
-  // Speaker tracking
   late SpeakerTracker _speakerTracker;
 
-  // Channel and user settings
   final String _channelName = 'test_room';
   final String _agoraAppId = '1400d886612b4896986d7db16b0bbc44';
-  // Backend base URL (centralized in AppConfig)
   late final String _backendUrl = AppConfig.backendBaseUrl;
+
   int _uid = 0;
   int _remoteUid = 0;
   String? _agoraToken;
+  DateTime? _tokenFetchedAt;  // ✅ NEW: Track when token was fetched
 
-  // UI state
   bool _isConnected = false;
   bool _isJoining = false;
   List<int> _remoteUsers = [];
   String _statusMessage = 'Disconnected';
   List<SpeakingEvent> _speakingEvents = [];
+  bool _isMuted = false;
 
-  // Debug: set true if you want continuous UID+volume logs.
-  // This can be noisy (prints every ~200ms per active speaker).
   final bool _logVolumes = true;
+  static const int TOKEN_VALID_DURATION = 3300; // Token valid for 1 hour (3600s), refresh at 55 min
 
   @override
   void initState() {
@@ -52,13 +48,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         setState(() {
           _speakingEvents.add(event);
         });
-        print('✅ Speaking event completed and sent to backend: $event');
+        print('✅ Speaking event completed: $event');
       },
     );
     _initializeAgora();
   }
 
-  /// Initialize Agora RTC Engine
   Future<void> _initializeAgora() async {
     try {
       await _requestMicrophonePermission();
@@ -67,18 +62,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         RtcEngineContext(appId: _agoraAppId),
       );
       await _agoraEngine.enableAudio();
-
-      // Enable audio volume indication with reportVad
       await _agoraEngine.enableAudioVolumeIndication(
         interval: 200,
         smooth: 3,
         reportVad: true,
       );
-
       _setupEventHandlers();
-
       setState(() {
-        _statusMessage = 'Ready to join call (click Join)';
+        _statusMessage = 'Ready to join call';
       });
     } catch (e) {
       print('Error initializing Agora: $e');
@@ -86,18 +77,25 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  /// Request microphone permission
   Future<void> _requestMicrophonePermission() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) {
-      _showErrorSnackBar('Microphone permission is required for voice calls');
+      _showErrorSnackBar('Microphone permission is required');
       throw Exception('Microphone permission denied');
     }
   }
 
-  /// Fetch Agora token from backend
   Future<void> _fetchAgoraToken() async {
     try {
+      // ✅ OPTIMIZATION: Check if token is still valid (not expired)
+      if (_agoraToken != null && _tokenFetchedAt != null) {
+        final timeSinceFetch = DateTime.now().difference(_tokenFetchedAt!).inSeconds;
+        if (timeSinceFetch < TOKEN_VALID_DURATION) {
+          print('✅ Token still valid, reusing (fetched ${timeSinceFetch}s ago)');
+          return; // Reuse existing token, skip network request
+        }
+      }
+
       if (_uid == 0) {
         _uid = Random().nextInt(100000) + 1;
       }
@@ -106,12 +104,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         '$_backendUrl/agora/token?channelName=$_channelName&uid=$_uid',
       );
 
-      print('Fetching token from: $url');
-
+      print('🔄 Fetching fresh token from backend...');
       final response = await http.get(url).timeout(
         const Duration(seconds: 10),
         onTimeout: () {
-          throw Exception('Token request timeout - is backend running on $_backendUrl?');
+          throw Exception('Token request timeout');
         },
       );
 
@@ -119,49 +116,40 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         final data = jsonDecode(response.body);
         setState(() {
           _agoraToken = data['token'];
-          _statusMessage = 'Token obtained successfully';
+          _tokenFetchedAt = DateTime.now();  // ✅ Record fetch time
+          _statusMessage = 'Token obtained';
         });
-        print('✅ Token fetched: ${_agoraToken?.substring(0, 20)}...');
+        print('✅ New token fetched');
       } else {
-        final error = jsonDecode(response.body)['error'] ?? 'Unknown error';
-        throw Exception('Failed to get token: $error (${response.statusCode})');
+        throw Exception('Failed to get token');
       }
     } catch (e) {
       print('❌ Error fetching token: $e');
       _showErrorSnackBar('Failed to fetch token: $e');
-      setState(() {
-        _statusMessage = 'Failed to fetch token';
-      });
       rethrow;
     }
   }
 
-  /// Setup event handlers for Agora RTC events
   void _setupEventHandlers() {
     _agoraEngine.registerEventHandler(
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
-          print('Local user ${connection.localUid} joined successfully');
-          // Start tracker timers once we are actually in-channel.
+          print('✅ Joined channel successfully');
           _speakerTracker.start();
           setState(() {
             _uid = connection.localUid ?? 0;
             _isConnected = true;
-            _statusMessage = 'Connected to channel';
+            _statusMessage = 'Connected';
           });
         },
-
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           print('Remote user $remoteUid joined');
           setState(() {
             _remoteUsers.add(remoteUid);
             _remoteUid = remoteUid;
-            _statusMessage = 'Remote user joined: $remoteUid';
           });
         },
-
-        onUserOffline: (RtcConnection connection, int remoteUid,
-            UserOfflineReasonType reason) {
+        onUserOffline: (RtcConnection connection, int remoteUid, UserOfflineReasonType reason) {
           print('Remote user $remoteUid left');
           _speakerTracker.removeUser(remoteUid);
           setState(() {
@@ -169,69 +157,48 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             if (_remoteUid == remoteUid) {
               _remoteUid = 0;
             }
-            _statusMessage = 'Remote user left';
           });
         },
-
-        onConnectionStateChanged: (RtcConnection connection,
-            ConnectionStateType state, ConnectionChangedReasonType reason) {
-          print('Connection state changed to: $state');
-          if (state == ConnectionStateType.connectionStateFailed) {
-            _showErrorSnackBar('Connection failed: $reason');
-          }
-        },
-
-        // Audio volume indication handler - 4 parameters: connection, speakers, totalVolume, publishVolume
-        onAudioVolumeIndication:
-            (connection, speakers, totalVolume, publishVolume) {
+        onAudioVolumeIndication: (connection, speakers, totalVolume, publishVolume) {
           final now = DateTime.now();
-
-          // Logs show UID + volume values continuously (helps verify detection in real time)
           for (final speaker in speakers) {
             final uid = speaker.uid ?? 0;
             final volume = speaker.volume ?? 0;
-            // final vad = speaker.vad ?? 0; // available if you want to log VAD
-
             if (_logVolumes) {
-              print('🔊 volume uid=$uid volume=$volume');
+              print('🔊 uid=$uid volume=$volume');
             }
-
             _speakerTracker.processAudioVolume(
               uid: uid,
               volume: volume,
               at: now,
             );
           }
-
-          // End "stuck speaking" users if SDK stops reporting them once they go silent.
           _speakerTracker.tick(now: now);
-        },
-
-        onError: (ErrorCodeType err, String msg) {
-          print('Error occurred: $err - $msg');
-          _showErrorSnackBar('Error: $msg');
         },
       ),
     );
   }
 
-  /// Join the voice channel
   Future<void> _joinChannel() async {
-    if (_isJoining) return;
+    if (_isJoining || _isConnected) {
+      _showErrorSnackBar('Already joining or connected');
+      return;
+    }
 
     setState(() {
       _isJoining = true;
-      _statusMessage = 'Fetching token...';
+      _statusMessage = 'Connecting...';
     });
 
     try {
+      // ✅ DEBUG: Track timing for delay analysis
+      print('📥 Starting channel join process...');
+      final startTime = DateTime.now();
+
       await _fetchAgoraToken();
-
       if (_agoraToken == null) {
-        throw Exception('Token is null after fetching');
+        throw Exception('Token is null');
       }
-
-      print('Joining channel: $_channelName with UID: $_uid');
 
       await _agoraEngine.joinChannel(
         token: _agoraToken!,
@@ -244,42 +211,68 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         ),
       );
 
+      final elapsed = DateTime.now().difference(startTime).inMilliseconds;
+      print('✅ Channel join completed in ${elapsed}ms');
+
       setState(() {
         _isJoining = false;
       });
     } catch (e) {
-      print('Error joining channel: $e');
-      _showErrorSnackBar('Failed to join channel: $e');
+      print('❌ Error joining channel: $e');
+      _showErrorSnackBar('Failed to join: $e');
       setState(() {
-        _isJoining = false;
-        _statusMessage = 'Failed to join channel';
+        _isJoining = false;  // ✅ CRITICAL FIX: Reset joining state so user can retry
+        _statusMessage = 'Failed to connect - tap to retry';
       });
     }
   }
 
-  /// Leave the voice channel
   Future<void> _leaveChannel() async {
     try {
-      setState(() {
-        _statusMessage = 'Leaving channel...';
-      });
-
       await _agoraEngine.leaveChannel();
-      _speakerTracker.reset(); // also stops internal timers
+      _speakerTracker.reset();
 
       setState(() {
         _isConnected = false;
         _remoteUsers.clear();
         _remoteUid = 0;
+        _isMuted = false;
         _statusMessage = 'Disconnected';
       });
+
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } catch (e) {
       print('Error leaving channel: $e');
       _showErrorSnackBar('Error leaving channel: $e');
     }
   }
 
-  /// Show error message
+  Future<void> _toggleMute() async {
+    if (!_isConnected) {
+      _showErrorSnackBar('Not connected to call');
+      return;
+    }
+
+    try {
+      final newMuteState = !_isMuted;
+      await _agoraEngine.muteLocalAudioStream(newMuteState);
+
+      setState(() {
+        _isMuted = newMuteState;
+      });
+
+      print('🔊 Mute toggled: $_isMuted');
+      _showErrorSnackBar(
+        _isMuted ? '🔇 Microphone Muted' : '🎤 Microphone Unmuted',
+      );
+    } catch (e) {
+      print('Error toggling mute: $e');
+      _showErrorSnackBar('Failed to toggle mute: $e');
+    }
+  }
+
   void _showErrorSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -297,7 +290,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     super.dispose();
   }
 
-  /// Leave channel and destroy Agora engine
   Future<void> _leaveChannelAndDestroy() async {
     try {
       if (_isConnected) {
@@ -312,271 +304,214 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Voice Call'),
-        backgroundColor: Colors.blue.shade700,
-      ),
-      body: Column(
-        children: [
-          // Status section
-          Container(
-            padding: const EdgeInsets.all(16.0),
-            color: Colors.grey.shade100,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Status:',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  _statusMessage,
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: _isConnected ? Colors.green : Colors.orange,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                if (_isConnected)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 8.0),
-                    child: Text(
-                      'Your UID: $_uid',
-                      style: const TextStyle(fontSize: 12, color: Colors.grey),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-
-          // Users with speaking indicators (always show when connected)
-          if (_isConnected)
+      backgroundColor: const Color(0xFF2a2a2a),
+      body: SafeArea(
+        child: Column(
+          children: [
+            // Top bar with back button and username
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Row(
                 children: [
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        border: Border.all(color: Colors.white30),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.arrow_back,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
                   const Text(
-                    'Users in Call:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                  ),
-                  const SizedBox(height: 8),
-                  Container(
-                    padding: const EdgeInsets.all(12.0),
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: [
-                        _buildUserIndicator(
-                          uid: _uid,
-                          label: 'You',
-                          isLocal: true,
-                        ),
-                        const SizedBox(height: 12),
-                        if (_remoteUsers.isEmpty)
-                          const Align(
-                            alignment: Alignment.centerLeft,
-                            child: Text(
-                              'Waiting for others to join...',
-                              style: TextStyle(fontSize: 12, color: Colors.grey),
-                            ),
-                          )
-                        else
-                          ..._remoteUsers.map((uid) {
-                            return Column(
-                              children: [
-                                _buildUserIndicator(
-                                  uid: uid,
-                                  label: 'User $uid',
-                                  isLocal: false,
-                                ),
-                                if (uid != _remoteUsers.last)
-                                  const SizedBox(height: 12),
-                              ],
-                            );
-                          }).toList(),
-                      ],
+                    'Hello, pk',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 16),
                 ],
               ),
             ),
+            const SizedBox(height: 24),
 
-          // Main content
-          Expanded(
-            child: Center(
+            // Control buttons (Speaker, Bluetooth, Exit Room)
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3a3a3a),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white10),
+              ),
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  _buildControlButton(
+                    icon: Icons.volume_up,
+                    label: 'Speaker',
+                    color: const Color(0xFF00D4FF),
+                  ),
+                  _buildControlButton(
+                    icon: Icons.bluetooth,
+                    label: 'Bluetooth',
+                    color: const Color(0xFF00D4FF),
+                  ),
+                  _buildControlButton(
+                    icon: Icons.close,
+                    label: 'Exit Room',
+                    color: const Color(0xFF8B4789),
+                    onTap: _leaveChannel,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 40),
+
+            // Center content
+            Expanded(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Icon(
-                    Icons.phone_in_talk,
-                    size: 80,
-                    color: _isConnected ? Colors.green : Colors.grey,
-                  ),
-                  const SizedBox(height: 24),
-                  Text(
-                    _isConnected ? 'Call in Progress' : 'Click Join to Start Call',
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                  if (_remoteUsers.isNotEmpty)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 8.0),
-                      child: Text(
-                        '${_remoteUsers.length} user(s) connected',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: Colors.green,
+                  // Large microphone button (Toggle Mute / Join Call)
+                  GestureDetector(
+                    onTap: () async {
+                      // Prevent rapid taps
+                      if (_isJoining) {
+                        _showErrorSnackBar('⏳ Connecting... please wait');
+                        return;
+                      }
+
+                      // If connected: toggle mute
+                      if (_isConnected) {
+                        await _toggleMute();
+                      }
+                      // If not connected: join channel
+                      else {
+                        await _joinChannel();
+                      }
+                    },
+                    child: Container(
+                      width: 140,
+                      height: 140,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: _isMuted
+                                ? const Color(0xFF777777).withOpacity(0.6)
+                                : _isJoining
+                                    ? const Color(0xFFFFCD00).withOpacity(0.6)
+                                    : const Color(0xFFFF4757).withOpacity(0.6),
+                            blurRadius: 30,
+                            spreadRadius: 5,
+                          ),
+                        ],
+                      ),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: _isMuted
+                                ? const Color(0xFF777777).withOpacity(0.4)
+                                : _isJoining
+                                    ? const Color(0xFFFFCD00).withOpacity(0.4)
+                                    : const Color(0xFFFF4757).withOpacity(0.4),
+                            width: 3,
+                          ),
+                        ),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: _isMuted
+                                ? const Color(0xFF777777)
+                                : _isJoining
+                                    ? const Color(0xFFFFCD00)
+                                    : const Color(0xFFFF4757),
+                          ),
+                          child: _isJoining
+                              ? const SizedBox(
+                                  width: 60,
+                                  height: 60,
+                                  child: CircularProgressIndicator(
+                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                    strokeWidth: 3,
+                                  ),
+                                )
+                              : Icon(
+                                  _isMuted ? Icons.mic_off : Icons.mic,
+                                  size: 60,
+                                  color: Colors.white,
+                                ),
                         ),
                       ),
                     ),
-                ],
-              ),
-            ),
-          ),
-
-          // Speaking events history
-          if (_speakingEvents.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(12.0),
-              color: Colors.blue.shade50,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Speaking Events:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
-                  const SizedBox(height: 8),
-                  SizedBox(
-                    height: 60,
-                    child: ListView.builder(
-                      itemCount: _speakingEvents.length,
-                      itemBuilder: (context, index) {
-                        final event = _speakingEvents[index];
-                        final duration = event.endTime.difference(event.startTime).inSeconds;
-                        return Padding(
-                          padding: const EdgeInsets.only(bottom: 4.0),
-                          child: Text(
-                            '🎤 User ${event.userId}: ${duration}s',
-                            style: const TextStyle(fontSize: 11),
-                          ),
-                        );
-                      },
+                  const SizedBox(height: 32),
+
+                  // Touch to speak text
+                  Text(
+                    _isJoining
+                        ? 'CONNECTING...'
+                        : _isConnected
+                            ? (_isMuted ? 'TAP TO UNMUTE' : 'TAP TO MUTE')
+                            : 'TAP TO JOIN CALL',
+                    style: TextStyle(
+                      color: _isJoining ? const Color(0xFFFFCD00) : Colors.white70,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.5,
                     ),
                   ),
                 ],
               ),
             ),
 
-          // Action buttons
-          Padding(
-            padding: const EdgeInsets.all(24.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isConnected ? _leaveChannel : null,
-                    icon: const Icon(Icons.call_end),
-                    label: const Text('Leave Call'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: !_isConnected && !_isJoining ? _joinChannel : null,
-                    icon: const Icon(Icons.call),
-                    label: const Text('Join Call'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+            // Bottom spacer
+            const SizedBox(height: 40),
+          ],
+        ),
       ),
     );
   }
 
-  /// Build user indicator widget
-  Widget _buildUserIndicator({
-    required int uid,
+  Widget _buildControlButton({
+    required IconData icon,
     required String label,
-    required bool isLocal,
+    required Color color,
+    VoidCallback? onTap,
   }) {
-    return ValueListenableBuilder<Map<int, UserSpeakingState>>(
-      valueListenable: _speakerTracker.speakingStatesNotifier,
-      builder: (context, speakingStates, _) {
-        final userState = speakingStates[uid];
-        final isSpeaking = userState?.isSpeaking ?? false;
-
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-          decoration: BoxDecoration(
-            color: isSpeaking ? Colors.green.shade50 : Colors.grey.shade50,
-            border: Border.all(
-              color: isSpeaking ? Colors.green : Colors.grey.shade300,
-              width: 2,
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        children: [
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              border: Border.all(color: color, width: 2),
+              borderRadius: BorderRadius.circular(12),
             ),
-            borderRadius: BorderRadius.circular(6),
+            child: Icon(icon, color: color, size: 28),
           ),
-          child: Row(
-            children: [
-              Container(
-                width: 16,
-                height: 16,
-                decoration: BoxDecoration(
-                  color: isSpeaking ? Colors.green : Colors.grey.shade300,
-                  shape: BoxShape.circle,
-                ),
-                child: isSpeaking
-                    ? const Icon(Icons.mic, size: 10, color: Colors.white)
-                    : null,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                        color: isSpeaking ? Colors.green.shade700 : Colors.grey.shade700,
-                      ),
-                    ),
-                    if (isSpeaking)
-                      const Text(
-                        '🎤 Speaking...',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: Colors.green,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
