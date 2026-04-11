@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'login_screen.dart';
 import 'auth_service.dart';
 import 'home_screen.dart';
+import 'admin_screen.dart';
 import 'app_config.dart';
 
 void main() {
@@ -23,6 +24,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/login': (context) => LoginScreen(backendUrl: AppConfig.backendBaseUrl),
         '/home': (context) => const HomeScreen(),
+        '/admin': (context) => const AdminScreen(),
       },
     );
   }
@@ -40,6 +42,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   late AuthService _authService;
   bool _isAuthenticated = false;
   bool _isChecking = true;
+  bool _isHost = false;
 
   @override
   void initState() {
@@ -51,8 +54,10 @@ class _AuthWrapperState extends State<AuthWrapper> {
   /// Check if user is already logged in
   Future<void> _checkAuthentication() async {
     final isAuth = await _authService.isAuthenticated();
+    final isHost = await _authService.isHost();
     setState(() {
       _isAuthenticated = isAuth;
+      _isHost = isHost;
       _isChecking = false;
     });
   }
@@ -65,9 +70,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    return _isAuthenticated
-        ? const HomeScreen()
-        : LoginScreen(backendUrl: AppConfig.backendBaseUrl);
+    if (_isAuthenticated) {
+      // Route hosts to admin, regular users to home
+      return _isHost ? const AdminScreen() : const HomeScreen();
+    }
+
+    return LoginScreen(backendUrl: AppConfig.backendBaseUrl);
   }
 }
 
