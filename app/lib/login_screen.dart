@@ -54,8 +54,9 @@ class _LoginScreenState extends State<LoginScreen> {
       );
 
       if (mounted && response != null) {
-        // Navigate to home screen on successful login
-        Navigator.of(context).pushReplacementNamed('/home');
+        // Route based on user role
+        final route = response.role == 'host' ? '/admin' : '/home';
+        Navigator.of(context).pushReplacementNamed(route);
       }
     } catch (e) {
       if (mounted) {

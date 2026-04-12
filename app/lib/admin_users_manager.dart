@@ -168,7 +168,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -207,12 +207,12 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                       backgroundColor: Colors.blue,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                        horizontal: 20,
+                        vertical: 14,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   ElevatedButton.icon(
                     onPressed: _loadUsers,
                     icon: const Icon(Icons.refresh),
@@ -221,8 +221,8 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                       backgroundColor: Colors.grey[700],
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                        horizontal: 20,
+                        vertical: 14,
                       ),
                     ),
                   ),
@@ -230,14 +230,14 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
 
           // Error message
           if (_error.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.red.shade900.withOpacity(0.3),
+                color: Colors.red.shade900.withValues(alpha: 0.3),
                 border: Border.all(color: Colors.red.shade700),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -256,106 +256,134 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
             ),
 
           if (_error.isEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
-            // Users table
+            // Users list
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_users.isEmpty)
               Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(32.0),
-                  child: Text(
-                    'No users found',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 16,
-                    ),
+                  padding: const EdgeInsets.all(40.0),
+                  child: Column(
+                    children: [
+                      Icon(
+                        Icons.people_outline,
+                        size: 48,
+                        color: Colors.white30,
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No users found',
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               )
             else
-              Expanded(
-                child: SingleChildScrollView(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3a3a3a),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white10),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3a3a3a),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: DataTable(
+                  columnSpacing: 20,
+                  headingRowHeight: 56,
+                  dataRowHeight: 60,
+                  columns: const [
+                    DataColumn(
+                      label: Text(
+                        'Username',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
                     ),
-                    child: DataTable(
-                      columns: const [
-                        DataColumn(
-                          label: Text(
-                            'Username',
-                            style: TextStyle(color: Colors.white),
+                    DataColumn(
+                      label: Text(
+                        'Role',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                    DataColumn(
+                      label: Text(
+                        'Created',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ],
+                  rows: _users.map((user) {
+                    final createdAt = user['createdAt'] as String?;
+                    final formattedDate = createdAt != null
+                        ? DateTime.parse(createdAt)
+                            .toString()
+                            .split('.')
+                            .first
+                        : 'N/A';
+
+                    return DataRow(
+                      cells: [
+                        DataCell(
+                          Text(
+                            user['username'] ?? 'Unknown',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 15,
+                            ),
                           ),
                         ),
-                        DataColumn(
-                          label: Text(
-                            'Role',
-                            style: TextStyle(color: Colors.white),
+                        DataCell(
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
+                            decoration: BoxDecoration(
+                              color: user['role'] == 'host'
+                                  ? Colors.orange.withValues(alpha: 0.2)
+                                  : Colors.blue.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              user['role'] ?? 'user',
+                              style: TextStyle(
+                                color: user['role'] == 'host'
+                                    ? Colors.orange
+                                    : Colors.blue,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ),
-                        DataColumn(
-                          label: Text(
-                            'Created',
-                            style: TextStyle(color: Colors.white),
+                        DataCell(
+                          Text(
+                            formattedDate,
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
-                      rows: _users.map((user) {
-                        final createdAt = user['createdAt'] as String?;
-                        final formattedDate = createdAt != null
-                            ? DateTime.parse(createdAt)
-                                .toString()
-                                .split('.')
-                                .first
-                            : 'N/A';
-
-                        return DataRow(
-                          cells: [
-                            DataCell(
-                              Text(
-                                user['username'] ?? 'Unknown',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
-                            DataCell(
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 8,
-                                  vertical: 4,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: user['role'] == 'host'
-                                      ? Colors.orange.withOpacity(0.2)
-                                      : Colors.blue.withOpacity(0.2),
-                                  borderRadius: BorderRadius.circular(4),
-                                ),
-                                child: Text(
-                                  user['role'] ?? 'user',
-                                  style: TextStyle(
-                                    color: user['role'] == 'host'
-                                        ? Colors.orange
-                                        : Colors.blue,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ),
-                            ),
-                            DataCell(
-                              Text(
-                                formattedDate,
-                                style: const TextStyle(color: Colors.white70),
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
+                    );
+                  }).toList(),
                 ),
               ),
           ],

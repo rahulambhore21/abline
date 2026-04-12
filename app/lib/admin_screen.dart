@@ -13,9 +13,10 @@ class AdminScreen extends StatefulWidget {
   State<AdminScreen> createState() => _AdminScreenState();
 }
 
-class _AdminScreenState extends State<AdminScreen> {
+class _AdminScreenState extends State<AdminScreen>
+    with SingleTickerProviderStateMixin {
   late AuthService _authService;
-  int _selectedIndex = 0;
+  late TabController _tabController;
   String _username = '';
   bool _isLoading = true;
   bool _isHost = false;
@@ -24,7 +25,14 @@ class _AdminScreenState extends State<AdminScreen> {
   void initState() {
     super.initState();
     _authService = AuthService(backendUrl: AppConfig.backendBaseUrl);
+    _tabController = TabController(length: 3, vsync: this);
     _loadUserInfo();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadUserInfo() async {
@@ -124,49 +132,35 @@ class _AdminScreenState extends State<AdminScreen> {
             ),
           ),
         ],
-      ),
-      body: SafeArea(
-        child: Row(
-          children: [
-            // Sidebar navigation
-            NavigationRail(
-              backgroundColor: const Color(0xFF1a1a1a),
-              selectedIndex: _selectedIndex,
-              onDestinationSelected: (int index) {
-                setState(() => _selectedIndex = index);
-              },
-              labelType: NavigationRailLabelType.selected,
-              destinations: const [
-                NavigationRailDestination(
-                  icon: Icon(Icons.dashboard),
-                  selectedIcon: Icon(Icons.dashboard, color: Colors.blue),
-                  label: Text('Dashboard'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.people),
-                  selectedIcon: Icon(Icons.people, color: Colors.blue),
-                  label: Text('Users'),
-                ),
-                NavigationRailDestination(
-                  icon: Icon(Icons.videocam),
-                  selectedIcon: Icon(Icons.videocam, color: Colors.blue),
-                  label: Text('Recordings'),
-                ),
-              ],
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.dashboard),
+              text: 'Dashboard',
             ),
-            // Main content area
-            Expanded(
-              child: IndexedStack(
-                index: _selectedIndex,
-                children: const [
-                  AdminDashboard(),
-                  AdminUsersManager(),
-                  AdminRecordingManager(),
-                ],
-              ),
+            Tab(
+              icon: Icon(Icons.people),
+              text: 'Users',
+            ),
+            Tab(
+              icon: Icon(Icons.videocam),
+              text: 'Recordings',
             ),
           ],
+          indicatorColor: Colors.blue,
+          labelColor: Colors.blue,
+          unselectedLabelColor: Colors.white70,
+          indicatorSize: TabBarIndicatorSize.label,
         ),
+      ),
+      body: TabBarView(
+        controller: _tabController,
+        children: const [
+          AdminDashboard(),
+          AdminUsersManager(),
+          AdminRecordingManager(),
+        ],
       ),
     );
   }

@@ -73,135 +73,183 @@ class _AdminDashboardState extends State<AdminDashboard> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Dashboard Overview',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'System statistics and monitoring',
+            style: TextStyle(
+              color: Colors.white70,
+              fontSize: 14,
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // Error message
+          if (_error.isNotEmpty)
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade900.withValues(alpha: 0.3),
+                border: Border.all(color: Colors.red.shade700),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.error, color: Colors.red),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _error,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          if (_error.isEmpty) ...[
+            // Stats grid - responsive
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final crossAxisCount =
+                    constraints.maxWidth > 1200 ? 3 : (constraints.maxWidth > 600 ? 2 : 1);
+                return GridView(
+                  gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: crossAxisCount,
+                    mainAxisSpacing: 20,
+                    crossAxisSpacing: 20,
+                    childAspectRatio: 1.1,
+                  ),
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  children: [
+                    _buildStatCard(
+                      title: 'Total Users',
+                      value: '$_totalUsers',
+                      icon: Icons.people,
+                      color: Colors.blue,
+                    ),
+                    _buildStatCard(
+                      title: 'Active Recordings',
+                      value: '$_activeRecordings',
+                      icon: Icons.videocam,
+                      color: Colors.red,
+                    ),
+                    _buildStatCard(
+                      title: 'Speaking Events',
+                      value: '$_totalSpeakingEvents',
+                      icon: Icons.mic,
+                      color: Colors.green,
+                    ),
+                  ],
+                );
+              },
+            ),
+            const SizedBox(height: 40),
+
+            // Quick actions section
             const Text(
-              'Dashboard Overview',
+              'Quick Actions',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 28,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'System statistics and monitoring',
-              style: TextStyle(
-                color: Colors.white70,
-                fontSize: 14,
-              ),
-            ),
-            const SizedBox(height: 32),
-
-            // Error message
-            if (_error.isNotEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade900.withOpacity(0.3),
-                  border: Border.all(color: Colors.red.shade700),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.error, color: Colors.red),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _error,
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-            if (_error.isEmpty) ...[
-              // Stats grid
-              GridView(
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 1.2,
-                ),
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                children: [
-                  _buildStatCard(
-                    title: 'Total Users',
-                    value: '$_totalUsers',
-                    icon: Icons.people,
-                    color: Colors.blue,
-                  ),
-                  _buildStatCard(
-                    title: 'Active Recordings',
-                    value: '$_activeRecordings',
-                    icon: Icons.videocam,
-                    color: Colors.red,
-                  ),
-                  _buildStatCard(
-                    title: 'Speaking Events',
-                    value: '$_totalSpeakingEvents',
-                    icon: Icons.mic,
-                    color: Colors.green,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 32),
-
-              // Quick actions
-              const Text(
-                'Quick Actions',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _loadDashboardData,
-                      icon: const Icon(Icons.refresh),
-                      label: const Text('Refresh'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('System health check passed ✅'),
+            const SizedBox(height: 20),
+            LayoutBuilder(
+              builder: (context, constraints) {
+                if (constraints.maxWidth > 600) {
+                  return Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _loadDashboardData,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Refresh'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
-                        );
-                      },
-                      icon: const Icon(Icons.health_and_safety),
-                      label: const Text('Health Check'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.green,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('System health check passed ✅'),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.health_and_safety),
+                          label: const Text('Health Check'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                } else {
+                  return Column(
+                    children: [
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: _loadDashboardData,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text('Refresh'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('System health check passed ✅'),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.health_and_safety),
+                          label: const Text('Health Check'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                    ],
+                  );
+                }
+              },
+            ),
           ],
-        ),
+        ],
       ),
     );
   }
@@ -213,22 +261,36 @@ class _AdminDashboardState extends State<AdminDashboard> {
     required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFF3a3a3a),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(color: Colors.white10),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon, color: color, size: 32),
-          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(icon, color: color, size: 36),
+          ),
+          const SizedBox(height: 16),
           Text(
             value,
             style: const TextStyle(
               color: Colors.white,
-              fontSize: 28,
+              fontSize: 32,
               fontWeight: FontWeight.bold,
             ),
           ),
@@ -238,6 +300,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             style: TextStyle(
               color: Colors.white70,
               fontSize: 14,
+              fontWeight: FontWeight.w500,
             ),
             textAlign: TextAlign.center,
           ),

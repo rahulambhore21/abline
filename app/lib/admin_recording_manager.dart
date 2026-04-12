@@ -19,7 +19,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   bool _isLoading = true;
   String _error = '';
 
-  // Form fields for starting recording
   final _channelNameController = TextEditingController();
   final _uidController = TextEditingController();
   bool _isStarting = false;
@@ -45,7 +44,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         _error = '';
       });
 
-      // Fetch active recordings
       final recordingsResponse = await http
           .get(Uri.parse('${AppConfig.backendBaseUrl}/recording/active'));
       if (recordingsResponse.statusCode == 200) {
@@ -55,7 +53,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         });
       }
 
-      // Fetch speaking events
       final eventsResponse = await http
           .get(Uri.parse('${AppConfig.backendBaseUrl}/events/speaking'));
       if (eventsResponse.statusCode == 200) {
@@ -217,7 +214,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
+    return SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -256,12 +253,12 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                       backgroundColor: Colors.red,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                        horizontal: 20,
+                        vertical: 14,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
                   ElevatedButton.icon(
                     onPressed: _loadRecordingData,
                     icon: const Icon(Icons.refresh),
@@ -270,8 +267,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                       backgroundColor: Colors.grey[700],
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 12,
+                        horizontal: 20,
+                        vertical: 14,
                       ),
                     ),
                   ),
@@ -279,14 +276,13 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
               ),
             ],
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 28),
 
-          // Error message
           if (_error.isNotEmpty)
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.red.shade900.withOpacity(0.3),
+                color: Colors.red.shade900.withValues(alpha: 0.3),
                 border: Border.all(color: Colors.red.shade700),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -305,24 +301,23 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
             ),
 
           if (_error.isEmpty) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
-            // Active Recordings Section
             const Text(
               'Active Recordings',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_activeRecordings.isEmpty)
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: const Color(0xFF3a3a3a),
                   borderRadius: BorderRadius.circular(8),
@@ -336,86 +331,88 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                 ),
               )
             else
-              SizedBox(
-                height: 150,
-                child: ListView.builder(
-                  itemCount: _activeRecordings.length,
-                  itemBuilder: (context, index) {
-                    final recording = _activeRecordings[index];
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF3a3a3a),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.red.shade400),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: Colors.red.withOpacity(0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Icon(
-                              Icons.videocam,
-                              color: Colors.red,
-                            ),
+              Column(
+                children: _activeRecordings.map((recording) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3a3a3a),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.red.shade400),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Channel: ${recording['channelName'] ?? 'N/A'}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                          child: const Icon(
+                            Icons.videocam,
+                            color: Colors.red,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Channel: ${recording['channelName'] ?? 'N/A'}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
                                 ),
-                                Text(
-                                  'SID: ${recording['sid']?.toString().substring(0, 20) ?? 'N/A'}...',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 12,
-                                  ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'SID: ${recording['sid']?.toString().substring(0, 20) ?? 'N/A'}...',
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
                                 ),
-                              ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () =>
+                              _stopRecording(recording['channelName'] ?? ''),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
                             ),
                           ),
-                          ElevatedButton(
-                            onPressed: () => _stopRecording(recording['channelName'] ?? ''),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Text('Stop'),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
+                          child: const Text('Stop'),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
 
-            const SizedBox(height: 32),
+            const SizedBox(height: 40),
 
-            // Speaking Events Section
             const Text(
               'Recent Speaking Events',
               style: TextStyle(
                 color: Colors.white,
-                fontSize: 18,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
 
             if (_speakingEvents.isEmpty)
               Container(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: const Color(0xFF3a3a3a),
                   borderRadius: BorderRadius.circular(8),
@@ -429,75 +426,77 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                 ),
               )
             else
-              Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF3a3a3a),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: ListView.builder(
-                    itemCount: _speakingEvents.length,
-                    itemBuilder: (context, index) {
-                      final event = _speakingEvents[index];
-                      final duration = event['duration'] ?? 0;
-                      return Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.white10,
-                              width: index < _speakingEvents.length - 1 ? 1 : 0,
-                            ),
+              Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3a3a3a),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: ListView.builder(
+                  itemCount: _speakingEvents.length,
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemBuilder: (context, index) {
+                    final event = _speakingEvents[index];
+                    final duration = event['duration'] ?? 0;
+                    return Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: BorderSide(
+                            color: Colors.white10,
+                            width: index < _speakingEvents.length - 1 ? 1 : 0,
                           ),
                         ),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Center(
-                                child: Text(
-                                  'U${event['userId']}',
-                                  style: const TextStyle(
-                                    color: Colors.green,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold,
-                                  ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: Colors.green.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: Text(
+                                'U${event['userId']}',
+                                style: const TextStyle(
+                                  color: Colors.green,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'User ${event['userId']} - Session ${event['sessionId']}',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w500,
-                                    ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'User ${event['userId']} - Session ${event['sessionId']}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w500,
+                                    fontSize: 15,
                                   ),
-                                  Text(
-                                    'Duration: ${duration}s',
-                                    style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 12,
-                                    ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Duration: ${duration}s',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 13,
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
           ],
