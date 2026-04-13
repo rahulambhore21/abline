@@ -1395,6 +1395,123 @@ app.get('/session/:id/users', (req, res) => {
 });
 
 /**
+ * POST /session/:id/start
+ * Start a session (host marks session as live)
+ * 
+ * Protected: Requires host role
+ */
+app.post('/session/:id/start', authMiddleware, allowRole('host'), (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    console.log(`🔍 Session start request:`, {
+      sessionId,
+      user: req.user?.username,
+      role: req.user?.role,
+    });
+
+    // Get or create session
+    if (!activeSessions.has(sessionId)) {
+      activeSessions.set(sessionId, {
+        sessionId,
+        users: new Map(),
+        startedAt: new Date(),
+        isActive: true,
+      });
+    } else {
+      const session = activeSessions.get(sessionId);
+      session.isActive = true;
+      session.startedAt = new Date();
+    }
+
+    console.log(`✅ Session ${sessionId} started by host ${req.user.username}`);
+
+    res.status(200).json({
+      success: true,
+      sessionId,
+      message: 'Session started successfully',
+      startedAt: activeSessions.get(sessionId).startedAt,
+    });
+  } catch (error) {
+    console.error('Error starting session:', error);
+    res.status(500).json({
+      error: 'Failed to start session',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /session/:id/stop
+ * Stop a session (host marks session as no longer live)
+ * 
+ * Protected: Requires host role
+ */
+app.post('/session/:id/stop', authMiddleware, allowRole('host'), (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+
+    if (!activeSessions.has(sessionId)) {
+      return res.status(404).json({
+        error: 'Session not found',
+        sessionId,
+      });
+    }
+
+    const session = activeSessions.get(sessionId);
+    session.isActive = false;
+    session.stoppedAt = new Date();
+
+    console.log(`⏹️ Session ${sessionId} stopped by host ${req.user.username}`);
+
+    res.status(200).json({
+      success: true,
+      sessionId,
+      message: 'Session stopped successfully',
+      stoppedAt: session.stoppedAt,
+    });
+  } catch (error) {
+    console.error('Error stopping session:', error);
+    res.status(500).json({
+      error: 'Failed to stop session',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /session/:id/status
+ * Get the current status of a session (active or not)
+ */
+app.get('/session/:id/status', (req, res) => {
+  try {
+    const { id: sessionId } = req.params;
+    const session = activeSessions.get(sessionId);
+
+    if (!session) {
+      return res.json({
+        sessionId,
+        isActive: false,
+        users: 0,
+      });
+    }
+
+    res.json({
+      sessionId,
+      isActive: session.isActive || false,
+      startedAt: session.startedAt,
+      stoppedAt: session.stoppedAt,
+      users: session.users.size,
+    });
+  } catch (error) {
+    console.error('Error fetching session status:', error);
+    res.status(500).json({
+      error: 'Failed to fetch session status',
+    });
+  }
+});
+
+/**
  * ============================================================================
  * Recordings Endpoints
  * ============================================================================
