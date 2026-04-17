@@ -474,6 +474,15 @@ async function stopRecording(channelName, resourceId, sid, mode = 'individual') 
     }
   } catch (error) {
     console.error('❌ Stop recording failed:', error.response?.data || error.message);
+    console.error('🔍 Error details:', {
+      status: error.response?.status,
+      errorCode: error.response?.data?.code,
+      reason: error.response?.data?.reason,
+      channelName,
+      sid,
+      resourceId,
+      mode: mode || 'N/A',
+    });
     throw new Error(`Failed to stop recording: ${error.message}`);
   }
 }
@@ -1005,7 +1014,7 @@ app.post('/recording/stop', authMiddleware, allowRole('host'), async (req, res) 
     // Allow stopping with only channelName by looking up the active recording.
     let resolvedResourceId = resourceId;
     let resolvedSid = sid;
-    let resolvedMode = 'individual';
+    let resolvedMode = 'mix'; // ✅ Changed from 'individual' to match recording mode
 
     if (!resolvedResourceId || !resolvedSid) {
       const active = getActiveRecording(channelName);
@@ -1016,7 +1025,7 @@ app.post('/recording/stop', authMiddleware, allowRole('host'), async (req, res) 
       }
       resolvedResourceId = active.resourceId;
       resolvedSid = active.sid;
-      resolvedMode = active.mode || 'individual';
+      resolvedMode = active.mode || 'mix'; // ✅ Default to 'mix'
     }
 
     await stopRecording(channelName, resolvedResourceId, resolvedSid, resolvedMode);

@@ -35,6 +35,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   List<SpeakingEvent> _speakingEvents = [];
   bool _isMuted = false;
 
+  // ✅ NEW: Recording status
+  bool _isRecording = false;
+  bool _checkingRecordingStatus = false;
+
   final bool _logVolumes = true;
   static const int TOKEN_VALID_DURATION = 3300; // Token valid for 1 hour (3600s), refresh at 55 min
 
@@ -136,6 +140,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           print('✅ Joined channel successfully');
           _speakerTracker.start();
+
+          // ✅ NEW: Check recording status when joined
+          _checkRecordingStatus();
+
           setState(() {
             _uid = connection.localUid ?? 0;
             _isConnected = true;
@@ -249,6 +257,41 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
+  /// ✅ NEW: Check if recording is active for this session
+  Future<void> _checkRecordingStatus() async {
+    if (_checkingRecordingStatus) return;
+
+    setState(() => _checkingRecordingStatus = true);
+
+    try {
+      final response = await http
+          .get(Uri.parse('$_backendUrl/recording/active'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final recordings = data['recordings'] as List;
+
+        // Check if there's an active recording for this channel
+        final isRecording = recordings.any((rec) => rec['channelName'] == _channelName);
+
+        if (mounted) {
+          setState(() {
+            _isRecording = isRecording;
+            _checkingRecordingStatus = false;
+          });
+        }
+
+        print('📡 Recording status: ${isRecording ? "🔴 RECORDING" : "⭕ Not recording"}');
+      }
+    } catch (e) {
+      print('Error checking recording status: $e');
+      if (mounted) {
+        setState(() => _checkingRecordingStatus = false);
+      }
+    }
+  }
+
   Future<void> _toggleMute() async {
     if (!_isConnected) {
       _showErrorSnackBar('Not connected to call');
@@ -341,6 +384,47 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               ),
             ),
             const SizedBox(height: 24),
+
+            // ✅ NEW: Recording Status Indicator
+            if (_isRecording)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.2),
+                  border: Border.all(color: Colors.red, width: 2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: const BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.red,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.red,
+                            blurRadius: 6,
+                            spreadRadius: 2,
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      '🔴 RECORDING ACTIVE',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (_isRecording) const SizedBox(height: 16),
 
             // Control buttons (Speaker, Bluetooth, Exit Room)
             Container(
