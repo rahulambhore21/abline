@@ -391,10 +391,6 @@ async function startRecording(channelName, resourceId) {
           channelType: 0,
           subscribeUidGroup: 0, // 0 = subscribe all
         },
-        // For individual mode, output format
-        recordingFileConfig: {
-          avFileType: ['aac'], // aac format for individual mode
-        },
         storageConfig: {
           vendor,
           region,
