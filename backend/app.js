@@ -389,6 +389,7 @@ async function startRecording(channelName, resourceId) {
           maxIdleTime: 30,
           streamTypes: 0, // audio-only
           channelType: 0,
+          subscribeUidGroup: 0, // 0 = subscribe all, 1 = subscribe designated, 2 = subscribe high volume
         },
         // For audio-only individual mode, m4a is the typical output.
         recordingFileConfig: {
