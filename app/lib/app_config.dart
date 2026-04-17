@@ -8,6 +8,7 @@ class AppConfig {
   static const String backendUrl = String.fromEnvironment(
     'BACKEND_URL',
     defaultValue: 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud',
+    // defaultValue: 'https://guided-practical-sole-latter.trycloudflare.com',
   );
 
   /// Normalized base URL with no trailing slash.

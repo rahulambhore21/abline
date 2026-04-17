@@ -474,8 +474,138 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               ),
             ),
 
+            // ✅ NEW: Speaking Status Section
+            if (_isConnected && _remoteUsers.isNotEmpty)
+              Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3a3a3a),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Who\'s Talking',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Expanded(
+                        child: ValueListenableBuilder<Map<int, UserSpeakingState>>(
+                          valueListenable: _speakerTracker.speakingStatesNotifier,
+                          builder: (context, speakingStates, _) {
+                            // Build list of users with speaking status
+                            final userEntries = speakingStates.entries.toList();
+
+                            if (userEntries.isEmpty) {
+                              return Center(
+                                child: Text(
+                                  'Listening...',
+                                  style: TextStyle(
+                                    color: Colors.white70,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              );
+                            }
+
+                            return ListView.separated(
+                              itemCount: userEntries.length,
+                              separatorBuilder: (_, __) => const Divider(color: Colors.white10),
+                              itemBuilder: (context, index) {
+                                final entry = userEntries[index];
+                                final uid = entry.key;
+                                final state = entry.value;
+
+                                return Row(
+                                  children: [
+                                    // Speaking indicator (animated dot)
+                                    Container(
+                                      width: 12,
+                                      height: 12,
+                                      decoration: BoxDecoration(
+                                        shape: BoxShape.circle,
+                                        color: state.isSpeaking
+                                            ? Colors.green
+                                            : Colors.grey,
+                                        boxShadow: state.isSpeaking
+                                            ? [
+                                                BoxShadow(
+                                                  color: Colors.green.withOpacity(0.5),
+                                                  blurRadius: 8,
+                                                )
+                                              ]
+                                            : null,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // User info
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            'User #$uid',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            state.isSpeaking ? '🎤 Speaking' : '🔇 Listening',
+                                            style: TextStyle(
+                                              color: state.isSpeaking
+                                                  ? Colors.green
+                                                  : Colors.white70,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    // Volume indicator
+                                    if (state.isSpeaking)
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.green.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'ACTIVE',
+                                          style: TextStyle(
+                                            color: Colors.green,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                );
+                              },
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
             // Bottom spacer
-            const SizedBox(height: 40),
+            const SizedBox(height: 16),
           ],
         ),
       ),
