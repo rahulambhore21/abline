@@ -391,9 +391,9 @@ async function startRecording(channelName, resourceId) {
           channelType: 0,
           subscribeUidGroup: 0, // 0 = subscribe all
         },
-        // For individual mode, Agora outputs .aac files per user
+        // For individual mode, output format
         recordingFileConfig: {
-          avFileType: [1], // 1 = aac format (supported for individual mode)
+          avFileType: ['aac'], // aac format for individual mode
         },
         storageConfig: {
           vendor,
