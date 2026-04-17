@@ -389,11 +389,11 @@ async function startRecording(channelName, resourceId) {
           maxIdleTime: 30,
           streamTypes: 0, // audio-only
           channelType: 0,
-          subscribeUidGroup: 0, // 0 = subscribe all, 1 = subscribe designated, 2 = subscribe high volume
+          subscribeUidGroup: 0, // 0 = subscribe all
         },
-        // For audio-only individual mode, m4a is the typical output.
+        // For individual mode, Agora outputs .aac files per user
         recordingFileConfig: {
-          avFileType: ['m4a'],
+          avFileType: [1], // 1 = aac format (supported for individual mode)
         },
         storageConfig: {
           vendor,
