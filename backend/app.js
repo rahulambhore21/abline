@@ -326,7 +326,7 @@ async function startRecording(channelName, resourceId) {
 
     // Agora Cloud Recording start route MUST include /mode/{mode}/start
     // Common modes: "individual" (separate tracks per user) and "mix".
-    const mode = 'individual';
+    const mode = 'mix';  // ✅ Changed to MIX mode - simpler, all audio combined
     const url = `${AGORA_RECORDING_API}/${AGORA_APP_ID}/cloud_recording/resourceid/${resourceId}/mode/${mode}/start`;
 
     // Cloud Recording generally requires uploading to your own cloud storage.
@@ -1606,6 +1606,160 @@ app.post('/recordings/add', (req, res) => {
     console.error('Error adding recording:', error);
     res.status(500).json({
       error: 'Failed to add recording',
+    });
+  }
+});
+
+/**
+ * ============================================================================
+ * Testing & Debug Endpoints
+ * ============================================================================
+ */
+
+/**
+ * POST /test/recording
+ * Quick test endpoint to verify recording works (no UI needed)
+ *
+ * Usage: curl -X POST http://localhost:5000/test/recording \
+ *   -H "Authorization: Bearer <token>" \
+ *   -H "Content-Type: application/json" \
+ *   -d '{"channelName":"test_room"}'
+ */
+app.post('/test/recording', authMiddleware, allowRole('host'), async (req, res) => {
+  try {
+    const { channelName = 'test_room' } = req.body;
+
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`🧪 RECORDING TEST - Channel: ${channelName}`);
+    console.log(`${'='.repeat(60)}\n`);
+
+    // Test 1: Verify credentials are set
+    console.log('📋 Test 1: Checking credentials...');
+    if (!AGORA_APP_ID || !AGORA_APP_CERTIFICATE || !AGORA_CUSTOMER_ID || !AGORA_CUSTOMER_SECRET) {
+      return res.status(400).json({
+        error: 'Missing Agora credentials in .env',
+        missing: {
+          AGORA_APP_ID: !AGORA_APP_ID,
+          AGORA_APP_CERTIFICATE: !AGORA_APP_CERTIFICATE,
+          AGORA_CUSTOMER_ID: !AGORA_CUSTOMER_ID,
+          AGORA_CUSTOMER_SECRET: !AGORA_CUSTOMER_SECRET,
+        },
+      });
+    }
+    console.log('✅ Agora credentials found\n');
+
+    // Test 2: Verify storage config
+    console.log('📋 Test 2: Checking storage config...');
+    const vendor = Number(process.env.RECORDING_VENDOR);
+    const region = Number(process.env.RECORDING_REGION);
+    const bucket = process.env.RECORDING_BUCKET;
+    const accessKey = process.env.RECORDING_ACCESS_KEY;
+    const secretKey = process.env.RECORDING_SECRET_KEY;
+
+    if (!bucket || !accessKey || !secretKey) {
+      return res.status(400).json({
+        error: 'Missing AWS storage config in .env',
+        missing: {
+          bucket: !bucket,
+          accessKey: !accessKey,
+          secretKey: !secretKey,
+        },
+      });
+    }
+    console.log('✅ AWS storage config found');
+    console.log(`   - Vendor: ${vendor} (2=S3), Region: ${region}`);
+    console.log(`   - Bucket: ${bucket}`);
+    console.log(`   - AccessKey: ${accessKey.substring(0, 10)}...`);
+    console.log('');
+
+    // Test 3: Try to acquire recording
+    console.log('📋 Test 3: Acquiring recording resource...');
+    const resourceId = await acquireRecording(channelName);
+    console.log(`✅ Resource acquired: ${resourceId.substring(0, 30)}...\n`);
+
+    // Test 4: Try to start recording
+    console.log('📋 Test 4: Starting MIX mode recording...');
+    const mode = 'mix';
+    const url = `${AGORA_RECORDING_API}/${AGORA_APP_ID}/cloud_recording/resourceid/${resourceId}/mode/${mode}/start`;
+
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    const privilegeExpire = currentTimestamp + TOKEN_TTL;
+    const recorderUid = 0;
+    const token = RtcTokenBuilder.buildTokenWithUid(
+      AGORA_APP_ID,
+      AGORA_APP_CERTIFICATE,
+      channelName,
+      recorderUid,
+      RtcRole.PUBLISHER,
+      privilegeExpire
+    );
+
+    const payload = {
+      cname: channelName,
+      uid: String(recorderUid),
+      clientRequest: {
+        token,
+        recordingConfig: {
+          maxIdleTime: 30,
+          streamTypes: 0,
+          channelType: 0,
+        },
+        storageConfig: {
+          vendor,
+          region,
+          bucket,
+          accessKey,
+          secretKey,
+        },
+      },
+    };
+
+    const response = await axios.post(url, payload, {
+      headers: {
+        Authorization: createRecordingAuthHeader(),
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (response.status === 200 && response.data.sid) {
+      console.log(`✅ Recording STARTED! SessionId: ${response.data.sid}\n`);
+      console.log(`${'='.repeat(60)}`);
+      console.log('🎉 SUCCESS - Recording is working!');
+      console.log(`${'='.repeat(60)}\n`);
+
+      return res.status(201).json({
+        success: true,
+        resourceId,
+        sid: response.data.sid,
+        message: 'Recording test successful!',
+      });
+    }
+
+    throw new Error('No sid returned from API');
+  } catch (error) {
+    console.error('\n❌ TEST FAILED');
+    console.error('Error:', error.response?.data || error.message);
+    console.log(`${'='.repeat(60)}\n`);
+
+    res.status(400).json({
+      error: 'Recording test failed',
+      details: error.response?.data || error.message,
+      troubleshooting: {
+        message: 'Possible causes:',
+        causes: [
+          '1. AWS S3 credentials invalid or expired',
+          '2. S3 bucket does not exist or not accessible',
+          '3. IAM user lacks S3 permissions',
+          '4. Agora account Cloud Recording not enabled',
+          '5. Channel name or configuration mismatch',
+        ],
+        next_steps: [
+          'Verify AWS credentials in backend/.env',
+          'Check S3 bucket exists and is accessible',
+          'Confirm Agora account has Cloud Recording enabled',
+          'Check IAM user has S3 full access permissions',
+        ],
+      },
     });
   }
 });
