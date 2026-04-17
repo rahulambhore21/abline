@@ -402,6 +402,7 @@ async function startRecording(channelName, resourceId) {
     };
 
     console.log(`📤 Starting ${mode.toUpperCase()} recording for channel: ${channelName}`);
+    console.log('📋 Recording payload:', JSON.stringify(payload, null, 2));
 
     const response = await axios.post(url, payload, {
       headers: {
@@ -431,6 +432,12 @@ async function startRecording(channelName, resourceId) {
     throw new Error('No sid returned from start API');
   } catch (error) {
     console.error('❌ Start recording failed:', error.response?.data || error.message);
+    console.error('🔍 Full error details:', {
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      message: error.message,
+    });
     throw new Error(`Failed to start recording: ${error.message}`);
   }
 }
