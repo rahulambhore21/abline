@@ -7,6 +7,7 @@ import 'dart:convert';
 import 'speaker_tracker.dart';
 import 'speaking_event.dart';
 import 'app_config.dart';
+import 'auth_service.dart';
 
 class VoiceCallScreen extends StatefulWidget {
   const VoiceCallScreen({super.key});
@@ -18,6 +19,7 @@ class VoiceCallScreen extends StatefulWidget {
 class _VoiceCallScreenState extends State<VoiceCallScreen> {
   late RtcEngine _agoraEngine;
   late SpeakerTracker _speakerTracker;
+  late AuthService _authService;
 
   final String _channelName = 'test_room';
   final String _agoraAppId = '1400d886612b4896986d7db16b0bbc44';
@@ -33,11 +35,19 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   List<int> _remoteUsers = [];
   String _statusMessage = 'Disconnected';
   List<SpeakingEvent> _speakingEvents = [];
-  bool _isMuted = false;
+  bool _isMuted = true; // ✅ Start muted, user holds to talk
+
+  // ✅ Session status
+  bool _isSessionActive = false;
+  bool _checkingSession = false;
+  Timer? _sessionStatusTimer; // ✅ FIX: Proper timer for session polling
 
   // ✅ NEW: Recording status
   bool _isRecording = false;
   bool _checkingRecordingStatus = false;
+
+  // ✅ NEW: User role check
+  bool _isHost = false;
 
   final bool _logVolumes = true;
   static const int TOKEN_VALID_DURATION = 3300; // Token valid for 1 hour (3600s), refresh at 55 min
@@ -45,6 +55,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   @override
   void initState() {
     super.initState();
+    _authService = AuthService(backendUrl: _backendUrl);
     _speakerTracker = SpeakerTracker(
       backendUrl: _backendUrl,
       sessionId: _channelName,
@@ -55,7 +66,90 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         print('✅ Speaking event completed: $event');
       },
     );
+    _loadUserRole();
     _initializeAgora();
+  }
+
+  /// Load user role to determine if user is host/admin
+  Future<void> _loadUserRole() async {
+    final isHost = await _authService.isHost();
+    setState(() {
+      _isHost = isHost;
+    });
+    print('👤 User role: ${isHost ? "Host (Admin)" : "User"}');
+
+    // ✅ If user (not host), start polling session status
+    if (!isHost) {
+      _startSessionStatusPolling();
+    } else {
+      // Host can always join
+      setState(() {
+        _isSessionActive = true;
+      });
+    }
+  }
+
+  /// ✅ Poll session status for regular users (FIX: Use proper Timer)
+  void _startSessionStatusPolling() {
+    // Cancel any existing timer first
+    _sessionStatusTimer?.cancel();
+
+    // Initial check
+    _checkSessionStatus();
+
+    // Poll every 3 seconds until connected
+    _sessionStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted || _isConnected) {
+        // Stop polling if widget disposed or user connected
+        timer.cancel();
+        _sessionStatusTimer = null;
+        return;
+      }
+      _checkSessionStatus();
+    });
+  }
+
+  /// ✅ Stop session status polling
+  void _stopSessionStatusPolling() {
+    _sessionStatusTimer?.cancel();
+    _sessionStatusTimer = null;
+  }
+
+  /// ✅ Check if session is active
+  Future<void> _checkSessionStatus() async {
+    if (_checkingSession || _isConnected) return;
+
+    setState(() => _checkingSession = true);
+
+    try {
+      final response = await http
+          .get(Uri.parse('$_backendUrl/session/$_channelName/status'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final isActive = data['isActive'] ?? false;
+
+        if (mounted) {
+          setState(() {
+            _isSessionActive = isActive;
+            _checkingSession = false;
+            if (!isActive) {
+              _statusMessage = 'Waiting for host to start session...';
+            } else {
+              _statusMessage = 'Session active - Ready to join';
+            }
+          });
+        }
+
+        print('📡 Session status: ${isActive ? "✅ Active" : "⏸️ Not started"}');
+      }
+    } catch (e) {
+      print('Error checking session status: $e');
+      if (mounted) {
+        setState(() => _checkingSession = false);
+      }
+    }
   }
 
   Future<void> _initializeAgora() async {
@@ -141,6 +235,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           print('✅ Joined channel successfully');
           _speakerTracker.start();
 
+          // ✅ Stop session polling once connected
+          _stopSessionStatusPolling();
+
           // ✅ NEW: Check recording status when joined
           _checkRecordingStatus();
 
@@ -193,6 +290,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       return;
     }
 
+    // ✅ Check if user is allowed to join (non-host users need active session)
+    if (!_isHost && !_isSessionActive) {
+      _showErrorSnackBar('⏸️ Waiting for host to start the session');
+      return;
+    }
+
     setState(() {
       _isJoining = true;
       _statusMessage = 'Connecting...';
@@ -222,8 +325,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
       print('✅ Channel join completed in ${elapsed}ms');
 
+      // ✅ Auto-unmute when joined to start conversation
+      await _agoraEngine.muteLocalAudioStream(true); // Start muted
+
       setState(() {
         _isJoining = false;
+        _isMuted = true; // Start muted, user holds button to talk
       });
     } catch (e) {
       print('❌ Error joining channel: $e');
@@ -244,9 +351,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         _isConnected = false;
         _remoteUsers.clear();
         _remoteUid = 0;
-        _isMuted = false;
+        _isMuted = true; // Reset to muted when leaving
         _statusMessage = 'Disconnected';
       });
+
+      // ✅ Restart polling for non-host users after leaving
+      if (!_isHost && mounted) {
+        _startSessionStatusPolling();
+      }
 
       if (mounted) {
         Navigator.pop(context);
@@ -292,27 +404,33 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  Future<void> _toggleMute() async {
-    if (!_isConnected) {
-      _showErrorSnackBar('Not connected to call');
-      return;
-    }
+  /// ✅ Unmute (hold to talk)
+  Future<void> _unmute() async {
+    if (!_isConnected) return;
 
     try {
-      final newMuteState = !_isMuted;
-      await _agoraEngine.muteLocalAudioStream(newMuteState);
-
+      await _agoraEngine.muteLocalAudioStream(false);
       setState(() {
-        _isMuted = newMuteState;
+        _isMuted = false;
       });
-
-      print('🔊 Mute toggled: $_isMuted');
-      _showErrorSnackBar(
-        _isMuted ? '🔇 Microphone Muted' : '🎤 Microphone Unmuted',
-      );
+      print('🎤 Unmuted - Speaking');
     } catch (e) {
-      print('Error toggling mute: $e');
-      _showErrorSnackBar('Failed to toggle mute: $e');
+      print('Error unmuting: $e');
+    }
+  }
+
+  /// ✅ Mute (release button)
+  Future<void> _mute() async {
+    if (!_isConnected) return;
+
+    try {
+      await _agoraEngine.muteLocalAudioStream(true);
+      setState(() {
+        _isMuted = true;
+      });
+      print('🔇 Muted - Listening');
+    } catch (e) {
+      print('Error muting: $e');
     }
   }
 
@@ -328,6 +446,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   @override
   void dispose() {
+    _stopSessionStatusPolling(); // ✅ FIX: Clean up polling timer
     _leaveChannelAndDestroy();
     _speakerTracker.dispose();
     super.dispose();
@@ -464,24 +583,26 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Large microphone button (Toggle Mute / Join Call)
+                  // ✅ Large microphone button (Hold to Talk / Tap to Join)
                   GestureDetector(
-                    onTap: () async {
-                      // Prevent rapid taps
+                    // When not connected: tap to join
+                    onTap: _isConnected ? null : () async {
                       if (_isJoining) {
                         _showErrorSnackBar('⏳ Connecting... please wait');
                         return;
                       }
-
-                      // If connected: toggle mute
-                      if (_isConnected) {
-                        await _toggleMute();
-                      }
-                      // If not connected: join channel
-                      else {
-                        await _joinChannel();
-                      }
+                      await _joinChannel();
                     },
+                    // When connected: hold to talk
+                    onTapDown: _isConnected ? (details) async {
+                      await _unmute(); // Unmute when pressing down
+                    } : null,
+                    onTapUp: _isConnected ? (details) async {
+                      await _mute(); // Mute when releasing
+                    } : null,
+                    onTapCancel: _isConnected ? () async {
+                      await _mute(); // Mute if gesture is cancelled
+                    } : null,
                     child: Container(
                       width: 140,
                       height: 140,
@@ -489,11 +610,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: _isMuted
-                                ? const Color(0xFF777777).withOpacity(0.6)
-                                : _isJoining
-                                    ? const Color(0xFFFFCD00).withOpacity(0.6)
-                                    : const Color(0xFFFF4757).withOpacity(0.6),
+                            color: _isJoining
+                                ? const Color(0xFFFFCD00).withOpacity(0.6)
+                                : _isMuted
+                                    ? const Color(0xFFFF4757).withOpacity(0.6) // Red when muted
+                                    : const Color(0xFF00FF41).withOpacity(0.6), // Green when speaking
                             blurRadius: 30,
                             spreadRadius: 5,
                           ),
@@ -503,22 +624,22 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: _isMuted
-                                ? const Color(0xFF777777).withOpacity(0.4)
-                                : _isJoining
-                                    ? const Color(0xFFFFCD00).withOpacity(0.4)
-                                    : const Color(0xFFFF4757).withOpacity(0.4),
+                            color: _isJoining
+                                ? const Color(0xFFFFCD00).withOpacity(0.4)
+                                : _isMuted
+                                    ? const Color(0xFFFF4757).withOpacity(0.4) // Red border when muted
+                                    : const Color(0xFF00FF41).withOpacity(0.4), // Green border when speaking
                             width: 3,
                           ),
                         ),
                         child: Container(
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _isMuted
-                                ? const Color(0xFF777777)
-                                : _isJoining
-                                    ? const Color(0xFFFFCD00)
-                                    : const Color(0xFFFF4757),
+                            color: _isJoining
+                                ? const Color(0xFFFFCD00)
+                                : _isMuted
+                                    ? const Color(0xFFFF4757) // Red when muted
+                                    : const Color(0xFF00FF41), // Green when speaking
                           ),
                           child: _isJoining
                               ? const SizedBox(
@@ -540,15 +661,19 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // Touch to speak text
+                  // ✅ Touch to speak text with hold instructions
                   Text(
                     _isJoining
                         ? 'CONNECTING...'
                         : _isConnected
-                            ? (_isMuted ? 'TAP TO UNMUTE' : 'TAP TO MUTE')
-                            : 'TAP TO JOIN CALL',
+                            ? (_isMuted ? 'HOLD TO TALK' : 'SPEAKING - RELEASE TO MUTE')
+                            : (_isSessionActive || _isHost ? 'TAP TO JOIN CALL' : 'WAITING FOR HOST...'),
                     style: TextStyle(
-                      color: _isJoining ? const Color(0xFFFFCD00) : Colors.white70,
+                      color: _isJoining
+                          ? const Color(0xFFFFCD00)
+                          : _isConnected && !_isMuted
+                              ? const Color(0xFF00FF41) // Green text when speaking
+                              : Colors.white70,
                       fontSize: 14,
                       fontWeight: FontWeight.w500,
                       letterSpacing: 1.5,
@@ -558,8 +683,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               ),
             ),
 
-            // ✅ NEW: Speaking Status Section
-            if (_isConnected && _remoteUsers.isNotEmpty)
+            // ✅ Speaking Status Section (only visible to host/admin)
+            if (_isConnected && _remoteUsers.isNotEmpty && _isHost)
               Expanded(
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
