@@ -37,6 +37,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   String _statusMessage = 'Disconnected';
   List<SpeakingEvent> _speakingEvents = [];
   bool _isMuted = true; // ✅ Start muted, user holds to talk
+  String _username = ''; // ✅ Store username dynamically
+
+  // ✅ Username mapping: uid -> username
+  Map<int, String> _usernames = {};
 
   // ✅ Session status
   bool _isSessionActive = false;
@@ -67,17 +71,21 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         print('✅ Speaking event completed: $event');
       },
     );
-    _loadUserRole();
+    _loadUserInfo(); // ✅ Load username
     _initializeAgora();
   }
 
-  /// Load user role to determine if user is host/admin
-  Future<void> _loadUserRole() async {
+  /// ✅ Load user info (username and role)
+  Future<void> _loadUserInfo() async {
+    final username = await _authService.getUsername();
     final isHost = await _authService.isHost();
+
     setState(() {
+      _username = username ?? 'User';
       _isHost = isHost;
     });
-    print('👤 User role: ${isHost ? "Host (Admin)" : "User"}');
+
+    print('👤 User: $_username, Role: ${isHost ? "Host (Admin)" : "User"}');
 
     // ✅ If user (not host), start polling session status
     if (!isHost) {
@@ -170,10 +178,52 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       setState(() {
         _statusMessage = 'Ready to join call';
       });
+
+      // ✅ Auto-join call after initialization
+      _autoJoinCall();
     } catch (e) {
       print('Error initializing Agora: $e');
       _showErrorSnackBar('Failed to initialize Agora: $e');
     }
+  }
+
+  /// ✅ Automatically join the call after Agora is ready
+  Future<void> _autoJoinCall() async {
+    // Wait a brief moment for session status to be checked
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    if (mounted && !_isConnected && !_isJoining) {
+      // Check if allowed to join
+      if (_isHost || _isSessionActive) {
+        print('🚀 Auto-joining call...');
+        await _joinChannel();
+      } else {
+        print('⏸️ Waiting for host to start session before auto-joining');
+        // Start listening for session status changes
+        _waitForSessionAndAutoJoin();
+      }
+    }
+  }
+
+  /// ✅ Wait for session to become active, then auto-join
+  void _waitForSessionAndAutoJoin() {
+    Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_isConnected || _isJoining) {
+        timer.cancel();
+        return;
+      }
+
+      if (_isSessionActive) {
+        print('✅ Session is now active, auto-joining...');
+        timer.cancel();
+        _joinChannel();
+      }
+    });
   }
 
   Future<void> _requestMicrophonePermission() async {
@@ -239,7 +289,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           // ✅ Stop session polling once connected
           _stopSessionStatusPolling();
 
-          // ✅ NEW: Check recording status when joined
+          // ✅ Register user in session
+          _registerUserInSession(connection.localUid ?? 0);
+
+          // ✅ Check recording status when joined
           _checkRecordingStatus();
 
           setState(() {
@@ -247,6 +300,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             _isConnected = true;
             _statusMessage = 'Connected';
           });
+
+          // ✅ Start fetching usernames periodically
+          _startFetchingUsernames();
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           print('Remote user $remoteUid joined');
@@ -370,7 +426,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  /// ✅ NEW: Check if recording is active for this session
+  /// ✅ Check if recording is active for this session
   Future<void> _checkRecordingStatus() async {
     if (_checkingRecordingStatus) return;
 
@@ -402,6 +458,74 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       if (mounted) {
         setState(() => _checkingRecordingStatus = false);
       }
+    }
+  }
+
+  /// ✅ Register user in session with username
+  Future<void> _registerUserInSession(int uid) async {
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$_backendUrl/session/$_channelName/users/add'),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'userId': uid,
+              'username': _username,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        print('✅ User registered in session: $_username (uid: $uid)');
+        // Add self to username mapping
+        setState(() {
+          _usernames[uid] = _username;
+        });
+      } else {
+        print('⚠️ Failed to register user in session: ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Error registering user in session: $e');
+    }
+  }
+
+  /// ✅ Start fetching usernames periodically
+  Timer? _usernamesFetchTimer;
+  void _startFetchingUsernames() {
+    _fetchUsernames(); // Initial fetch
+
+    _usernamesFetchTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (!mounted || !_isConnected) {
+        timer.cancel();
+        return;
+      }
+      _fetchUsernames();
+    });
+  }
+
+  /// ✅ Fetch usernames from backend
+  Future<void> _fetchUsernames() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_backendUrl/session/$_channelName/users'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final users = data['users'] as List;
+
+        if (mounted) {
+          setState(() {
+            for (var user in users) {
+              final userId = user['userId'];
+              final username = user['username'];
+              _usernames[userId] = username;
+            }
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching usernames: $e');
     }
   }
 
@@ -448,6 +572,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   @override
   void dispose() {
     _stopSessionStatusPolling(); // ✅ FIX: Clean up polling timer
+    _usernamesFetchTimer?.cancel(); // ✅ Clean up username fetch timer
     _leaveChannelAndDestroy();
     _speakerTracker.dispose();
     super.dispose();
@@ -492,9 +617,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                     ),
                   ),
                   const SizedBox(width: 12),
-                  const Text(
-                    'Hello, pk',
-                    style: TextStyle(
+                  Text(
+                    'Hello, $_username', // ✅ Dynamic username
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -624,22 +749,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ✅ Large microphone button (Hold to Talk / Tap to Join)
+                  // ✅ Microphone button (Hold to Talk - auto-joined, no tap to join)
                   GestureDetector(
-                    // When not connected: tap to join (only if allowed)
-                    onTap: _isConnected ? null : () async {
-                      if (_isJoining) {
-                        _showErrorSnackBar('⏳ Connecting... please wait');
-                        return;
-                      }
-                      // ✅ Extra check: Prevent join if session not active for non-host
-                      if (!_isHost && !_isSessionActive) {
-                        _showErrorSnackBar('⏸️ Waiting for host to start the session');
-                        return;
-                      }
-                      await _joinChannel();
-                    },
-                    // When connected: hold to talk
+                    // Hold to talk (push-to-talk)
                     onTapDown: _isConnected ? (details) async {
                       await _unmute(); // Unmute when pressing down
                     } : null,
@@ -713,13 +825,15 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // ✅ Touch to speak text with hold instructions
+                  // ✅ Status text (auto-joining, no manual join needed)
                   Text(
                     _isJoining
                         ? 'CONNECTING...'
                         : _isConnected
                             ? (_isMuted ? 'HOLD TO TALK' : 'SPEAKING - RELEASE TO MUTE')
-                            : (_isSessionActive || _isHost ? 'TAP TO JOIN CALL' : 'WAITING FOR HOST...'),
+                            : (!_isHost && !_isSessionActive)
+                                ? 'WAITING FOR HOST...'
+                                : 'JOINING...',
                     style: TextStyle(
                       color: _isJoining
                           ? const Color(0xFFFFCD00)
@@ -784,6 +898,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                                 final entry = userEntries[index];
                                 final uid = entry.key;
                                 final state = entry.value;
+                                final username = _usernames[uid] ?? 'User #$uid'; // ✅ Get actual username
 
                                 return Row(
                                   children: [
@@ -813,7 +928,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                                         crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           Text(
-                                            'User #$uid',
+                                            username, // ✅ Show actual username instead of User #123
                                             style: const TextStyle(
                                               color: Colors.white,
                                               fontSize: 14,

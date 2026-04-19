@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'voice_call_screen.dart';
 import 'auth_service.dart';
 import 'app_config.dart';
@@ -14,14 +17,64 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late AuthService _authService;
   String _hostName = '';
-  bool _isHostOnline = true;
+  bool _isHostOnline = false; // ✅ Default to offline
   bool _isLoading = true;
+  Timer? _sessionStatusTimer; // ✅ Timer for polling session status
 
   @override
   void initState() {
     super.initState();
     _authService = AuthService(backendUrl: AppConfig.backendBaseUrl);
     _loadUserInfo();
+    _startSessionStatusPolling(); // ✅ Start checking session status
+  }
+
+  @override
+  void dispose() {
+    _sessionStatusTimer?.cancel(); // ✅ Clean up timer
+    super.dispose();
+  }
+
+  /// ✅ Poll session status to check if host has started the call
+  void _startSessionStatusPolling() {
+    _checkSessionStatus(); // Initial check
+
+    // Poll every 3 seconds
+    _sessionStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      _checkSessionStatus();
+    });
+  }
+
+  /// ✅ Check if session is active (host has started the call)
+  Future<void> _checkSessionStatus() async {
+    try {
+      final response = await http
+          .get(Uri.parse('${AppConfig.backendBaseUrl}/session/test_room/status'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final isActive = data['isActive'] ?? false;
+
+        if (mounted) {
+          setState(() {
+            _isHostOnline = isActive;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error checking session status: $e');
+      // Keep offline status on error
+      if (mounted) {
+        setState(() {
+          _isHostOnline = false;
+        });
+      }
+    }
   }
 
   /// Load user info
@@ -179,16 +232,36 @@ class _HomeScreenState extends State<HomeScreen> {
                                 vertical: 4,
                               ),
                               decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.2),
+                                color: _isHostOnline
+                                    ? Colors.green.withOpacity(0.2)
+                                    : Colors.red.withOpacity(0.2), // ✅ Red when offline
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              child: const Text(
-                                'Host is Online',
-                                style: TextStyle(
-                                  color: Color(0xFF00FF41),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: _isHostOnline
+                                          ? const Color(0xFF00FF41)
+                                          : Colors.red, // ✅ Red dot when offline
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _isHostOnline ? 'Host is Online' : 'Host is Offline', // ✅ Dynamic text
+                                    style: TextStyle(
+                                      color: _isHostOnline
+                                          ? const Color(0xFF00FF41)
+                                          : Colors.red, // ✅ Red text when offline
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -201,24 +274,28 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const VoiceCallScreen(),
-                              ),
-                            );
-                          },
+                          onPressed: _isHostOnline
+                              ? () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => const VoiceCallScreen(),
+                                    ),
+                                  );
+                                }
+                              : null, // ✅ Disabled when host is offline
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
+                            backgroundColor: _isHostOnline ? Colors.blue : Colors.grey, // ✅ Grey when disabled
                             foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey, // ✅ Grey when disabled
+                            disabledForegroundColor: Colors.white60, // ✅ Dimmed text
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(8),
                             ),
                           ),
-                          child: const Text(
-                            'Join Room',
-                            style: TextStyle(
+                          child: Text(
+                            _isHostOnline ? 'Join Room' : 'Waiting for Host...', // ✅ Dynamic button text
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w600,
                             ),

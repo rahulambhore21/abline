@@ -1348,6 +1348,9 @@ app.post('/session/:id/users/add', (req, res) => {
       activeSessions.set(sessionId, {
         sessionId,
         users: new Map(),
+        isActive: false, // ✅ FIX: Explicitly set session as inactive by default
+        startedAt: null,
+        stoppedAt: null,
       });
     }
 
