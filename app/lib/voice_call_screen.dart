@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:math';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'speaker_tracker.dart';
@@ -545,6 +546,46 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               ),
             if (_isRecording) const SizedBox(height: 16),
 
+            // ✅ NEW: Session Status Indicator (for non-host users)
+            if (!_isHost && !_isConnected)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: _isSessionActive
+                      ? Colors.green.withOpacity(0.2)
+                      : Colors.orange.withOpacity(0.2),
+                  border: Border.all(
+                    color: _isSessionActive ? Colors.green : Colors.orange,
+                    width: 2,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      _isSessionActive ? Icons.check_circle : Icons.access_time,
+                      color: _isSessionActive ? Colors.green : Colors.orange,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _isSessionActive
+                            ? '✅ Session is active - You can join now'
+                            : '⏳ Waiting for host to start the session...',
+                        style: TextStyle(
+                          color: _isSessionActive ? Colors.green : Colors.orange,
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            if (!_isHost && !_isConnected) const SizedBox(height: 16),
+
             // Control buttons (Speaker, Bluetooth, Exit Room)
             Container(
               padding: const EdgeInsets.all(20),
@@ -585,10 +626,15 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 children: [
                   // ✅ Large microphone button (Hold to Talk / Tap to Join)
                   GestureDetector(
-                    // When not connected: tap to join
+                    // When not connected: tap to join (only if allowed)
                     onTap: _isConnected ? null : () async {
                       if (_isJoining) {
                         _showErrorSnackBar('⏳ Connecting... please wait');
+                        return;
+                      }
+                      // ✅ Extra check: Prevent join if session not active for non-host
+                      if (!_isHost && !_isSessionActive) {
+                        _showErrorSnackBar('⏸️ Waiting for host to start the session');
                         return;
                       }
                       await _joinChannel();
@@ -612,9 +658,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                           BoxShadow(
                             color: _isJoining
                                 ? const Color(0xFFFFCD00).withOpacity(0.6)
-                                : _isMuted
-                                    ? const Color(0xFFFF4757).withOpacity(0.6) // Red when muted
-                                    : const Color(0xFF00FF41).withOpacity(0.6), // Green when speaking
+                                : (!_isHost && !_isSessionActive && !_isConnected)
+                                    ? Colors.grey.withOpacity(0.3) // ✅ Grey when disabled
+                                    : _isMuted
+                                        ? const Color(0xFFFF4757).withOpacity(0.6) // Red when muted
+                                        : const Color(0xFF00FF41).withOpacity(0.6), // Green when speaking
                             blurRadius: 30,
                             spreadRadius: 5,
                           ),
@@ -626,9 +674,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                           border: Border.all(
                             color: _isJoining
                                 ? const Color(0xFFFFCD00).withOpacity(0.4)
-                                : _isMuted
-                                    ? const Color(0xFFFF4757).withOpacity(0.4) // Red border when muted
-                                    : const Color(0xFF00FF41).withOpacity(0.4), // Green border when speaking
+                                : (!_isHost && !_isSessionActive && !_isConnected)
+                                    ? Colors.grey.withOpacity(0.3) // ✅ Grey border when disabled
+                                    : _isMuted
+                                        ? const Color(0xFFFF4757).withOpacity(0.4) // Red border when muted
+                                        : const Color(0xFF00FF41).withOpacity(0.4), // Green border when speaking
                             width: 3,
                           ),
                         ),
@@ -637,9 +687,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                             shape: BoxShape.circle,
                             color: _isJoining
                                 ? const Color(0xFFFFCD00)
-                                : _isMuted
-                                    ? const Color(0xFFFF4757) // Red when muted
-                                    : const Color(0xFF00FF41), // Green when speaking
+                                : (!_isHost && !_isSessionActive && !_isConnected)
+                                    ? Colors.grey // ✅ Grey when disabled
+                                    : _isMuted
+                                        ? const Color(0xFFFF4757) // Red when muted
+                                        : const Color(0xFF00FF41), // Green when speaking
                           ),
                           child: _isJoining
                               ? const SizedBox(
