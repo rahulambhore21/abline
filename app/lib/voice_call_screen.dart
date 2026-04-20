@@ -54,6 +54,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   // ✅ NEW: User role check
   bool _isHost = false;
 
+  // ✅ NEW: Host UID for selective audio subscription
+  int? _hostUid;
+
   final bool _logVolumes = true;
   static const int TOKEN_VALID_DURATION = 3300; // Token valid for 1 hour (3600s), refresh at 55 min
 
@@ -310,6 +313,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             _remoteUsers.add(remoteUid);
             _remoteUid = remoteUid;
           });
+
+          // ✅ SELECTIVE AUDIO: If current user is not host, mute all clients (only hear admin)
+          _applySelectiveAudioSubscription(remoteUid);
         },
         onUserOffline: (RtcConnection connection, int remoteUid, UserOfflineReasonType reason) {
           print('Remote user $remoteUid left');
@@ -339,6 +345,28 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         },
       ),
     );
+  }
+
+  /// ✅ Apply selective audio subscription based on user role
+  /// - Regular users: Only hear the admin/host
+  /// - Admin/host users: Hear everyone
+  Future<void> _applySelectiveAudioSubscription(int remoteUid) async {
+    if (_isHost) {
+      // Host can hear everyone - subscribe to all audio streams (default behavior)
+      print('👑 Host: Subscribing to all audio streams (UID: $remoteUid)');
+      await _agoraEngine.muteRemoteAudioStream(remoteUid, false);
+    } else {
+      // Regular user: Only subscribe to host's audio stream
+      if (_hostUid != null && remoteUid == _hostUid) {
+        // This is the host - unmute them
+        print('🔊 Client: Unmuting HOST audio stream (UID: $remoteUid)');
+        await _agoraEngine.muteRemoteAudioStream(remoteUid, false);
+      } else {
+        // This is another client - mute them
+        print('🔇 Client: Muting other CLIENT audio stream (UID: $remoteUid)');
+        await _agoraEngine.muteRemoteAudioStream(remoteUid, true);
+      }
+    }
   }
 
   Future<void> _joinChannel() async {
@@ -471,16 +499,32 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             body: jsonEncode({
               'userId': uid,
               'username': _username,
+              'role': _isHost ? 'host' : 'user', // ✅ Send role to backend
             }),
           )
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
         print('✅ User registered in session: $_username (uid: $uid)');
-        // Add self to username mapping
+
+        // ✅ Get host UID from response
+        final data = jsonDecode(response.body);
+        final hostUid = data['hostUid'];
+
         setState(() {
           _usernames[uid] = _username;
+          if (hostUid != null) {
+            _hostUid = hostUid;
+            print('👑 Host UID identified: $_hostUid');
+          }
         });
+
+        // ✅ Apply selective audio subscription for existing users
+        if (!_isHost) {
+          for (final remoteUid in _remoteUsers) {
+            await _applySelectiveAudioSubscription(remoteUid);
+          }
+        }
       } else {
         print('⚠️ Failed to register user in session: ${response.body}');
       }
@@ -513,6 +557,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final users = data['users'] as List;
+        final hostUid = data['hostUid'];
 
         if (mounted) {
           setState(() {
@@ -520,6 +565,19 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               final userId = user['userId'];
               final username = user['username'];
               _usernames[userId] = username;
+            }
+
+            // ✅ Update host UID if available
+            if (hostUid != null && _hostUid == null) {
+              _hostUid = hostUid;
+              print('👑 Host UID identified from user list: $_hostUid');
+
+              // ✅ Re-apply selective audio subscription if we just learned the host UID
+              if (!_isHost) {
+                for (final remoteUid in _remoteUsers) {
+                  _applySelectiveAudioSubscription(remoteUid);
+                }
+              }
             }
           });
         }

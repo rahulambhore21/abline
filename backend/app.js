@@ -1329,13 +1329,14 @@ app.get('/events/speaking', async (req, res) => {
  * Body:
  *   {
  *     userId: number,
- *     username: string
+ *     username: string,
+ *     role: string (optional: 'host' or 'user')
  *   }
  */
 app.post('/session/:id/users/add', (req, res) => {
   try {
     const { id: sessionId } = req.params;
-    const { userId, username } = req.body;
+    const { userId, username, role } = req.body;
 
     if (!userId || !username) {
       return res.status(400).json({
@@ -1348,22 +1349,32 @@ app.post('/session/:id/users/add', (req, res) => {
       activeSessions.set(sessionId, {
         sessionId,
         users: new Map(),
-        isActive: false, // ✅ FIX: Explicitly set session as inactive by default
+        isActive: false,
         startedAt: null,
         stoppedAt: null,
+        hostUid: null, // ✅ Track host UID for selective audio subscription
       });
     }
 
     const session = activeSessions.get(sessionId);
+
+    // ✅ Track host UID if this user is a host
+    if (role === 'host') {
+      session.hostUid = userId;
+      console.log(`👑 Host joined session ${sessionId} with UID: ${userId}`);
+    }
+
     session.users.set(userId, {
       userId,
       username,
       isSpeaking: false,
+      role: role || 'user', // ✅ Store user role
     });
 
     res.status(200).json({
       success: true,
       message: `User ${userId} added to session ${sessionId}`,
+      hostUid: session.hostUid, // ✅ Return host UID for client-side filtering
     });
   } catch (error) {
     console.error('Error adding user to session:', error);
@@ -1387,6 +1398,7 @@ app.get('/session/:id/users', (req, res) => {
         sessionId,
         users: [],
         total: 0,
+        hostUid: null, // ✅ Return null if no session
       });
     }
 
@@ -1394,12 +1406,14 @@ app.get('/session/:id/users', (req, res) => {
       userId: user.userId,
       username: user.username,
       isSpeaking: user.isSpeaking,
+      role: user.role || 'user', // ✅ Include role information
     }));
 
     res.json({
       sessionId,
       users,
       total: users.length,
+      hostUid: session.hostUid, // ✅ Return host UID for client-side audio filtering
     });
   } catch (error) {
     console.error('Error fetching session users:', error);
