@@ -438,8 +438,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   const SizedBox(height: 12),
                   Text(
                     _isHostLive
-                        ? '✅ Session Active\n$_activeUsersInSession user(s) in call'
-                        : '❌ No active session\nTap Start Call to go live',
+                        ? '✅ Call is active'
+                        : '❌ No active call',
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -447,51 +447,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ✅ Start/Stop Call buttons
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isHostLive ? null : (_isStartingCall ? null : _startCallSession),
-                          icon: const Icon(Icons.play_arrow),
-                          label: const Text('Start Call'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.grey,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _isHostLive ? _stopCallSession : null,
-                          icon: const Icon(Icons.stop),
-                          label: const Text('Stop Call'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.grey,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  
-                  // ✅ NEW: Join Call button for host participation
+                  // ✅ Join Call button - starts session automatically when clicked
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: _isHostLive ? _joinCall : null,
-                      icon: const Icon(Icons.videocam),
+                      onPressed: _joinCall,
+                      icon: const Icon(Icons.phone),
                       label: const Text('Join Call as Host'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
-                        disabledBackgroundColor: Colors.grey,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                     ),

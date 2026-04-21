@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'auth_service.dart';
 import 'app_config.dart';
+import 'recording.dart';
+import 'recording_list_widget.dart';
 
 /// Admin recording manager for controlling recordings
 class AdminRecordingManager extends StatefulWidget {
@@ -16,6 +18,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   late AuthService _authService;
   List<Map<String, dynamic>> _activeRecordings = [];
   List<Map<String, dynamic>> _speakingEvents = [];
+  Map<int, List<Recording>> _recordingsByUser = {}; // ✅ NEW: Recordings grouped by user
+  List<Recording> _allSessionRecordings = []; // ✅ NEW: All recordings in session
   bool _isLoading = true;
   String _error = '';
 
@@ -60,6 +64,42 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         setState(() {
           _speakingEvents = List<Map<String, dynamic>>.from(data['events'] ?? []);
         });
+      }
+
+      // ✅ NEW: Load all recordings by user for session
+      try {
+        final userRecordingsResponse = await http.get(
+          Uri.parse('${AppConfig.backendBaseUrl}/recordings/session/test_room'),
+          headers: {
+            'Authorization': 'Bearer ${await _authService.getToken()}',
+          },
+        );
+
+        if (userRecordingsResponse.statusCode == 200) {
+          final data = jsonDecode(userRecordingsResponse.body);
+          final recordingsList = (data['recordings'] as List?)
+              ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
+              .toList() ?? [];
+
+          final byUser = (data['byUser'] as Map?)?.map(
+            (userId, recordings) => MapEntry(
+              int.parse(userId.toString()),
+              (recordings as List)
+                  .map((r) => Recording.fromJson(r as Map<String, dynamic>))
+                  .toList(),
+            ),
+          ) ?? {};
+
+          setState(() {
+            _allSessionRecordings = recordingsList;
+            _recordingsByUser = byUser;
+          });
+
+          print('✅ Loaded ${recordingsList.length} session recordings');
+        }
+      } catch (e) {
+        print('Note: User recordings not available: $e');
+        // Don't treat this as a fatal error
       }
 
       setState(() => _isLoading = false);
@@ -498,6 +538,110 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                     );
                   },
                 ),
+              ),
+
+            // ✅ NEW: All Recordings by User Section
+            const SizedBox(height: 40),
+            const Text(
+              'All Recordings by User',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            if (_recordingsByUser.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF3a3a3a),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Center(
+                  child: Text(
+                    'No user recordings yet',
+                    style: TextStyle(color: Colors.white70),
+                  ),
+                ),
+              )
+            else
+              Column(
+                children: _recordingsByUser.entries.map((entry) {
+                  final userId = entry.key;
+                  final recordings = entry.value;
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3a3a3a),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 48,
+                                height: 48,
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF00FF41).withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    'U$userId',
+                                    style: const TextStyle(
+                                      color: Color(0xFF00FF41),
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'User #$userId',
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      '${recordings.length} recording${recordings.length != 1 ? 's' : ''}',
+                                      style: TextStyle(
+                                        color: Colors.white70,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          child: RecordingListWidget(
+                            recordings: recordings,
+                            backendUrl: AppConfig.backendBaseUrl,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
               ),
           ],
         ],

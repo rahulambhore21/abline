@@ -5,10 +5,15 @@ import 'dart:math';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:record/record.dart';
+import 'package:path_provider/path_provider.dart';
+import 'dart:io';
 import 'speaker_tracker.dart';
 import 'speaking_event.dart';
 import 'app_config.dart';
 import 'auth_service.dart';
+import 'recording.dart';
+import 'user_recordings_screen.dart';
 
 class VoiceCallScreen extends StatefulWidget {
   const VoiceCallScreen({super.key});
@@ -50,6 +55,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   // ✅ NEW: Recording status
   bool _isRecording = false;
   bool _checkingRecordingStatus = false;
+  Timer? _recordingStatusTimer; // ✅ NEW: Timer for recording status polling
+
+  // ✅ NEW: Audio recording for hold-to-speak
+  late AudioRecorder _audioRecorder;
+  bool _isRecordingAudio = false;
+  DateTime? _recordingStartTime;
+  List<Recording> _userRecordings = [];
 
   // ✅ NEW: User role check
   bool _isHost = false;
@@ -66,6 +78,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   void initState() {
     super.initState();
     _authService = AuthService(backendUrl: _backendUrl);
+    _audioRecorder = AudioRecorder(); // ✅ NEW: Initialize audio recorder
     _speakerTracker = SpeakerTracker(
       backendUrl: _backendUrl,
       sessionId: _channelName,
@@ -112,13 +125,15 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     _checkSessionStatus();
 
     // ✅ OPTIMIZATION: Poll every 5 seconds (less aggressive)
+    // ✅ IMPORTANT: Continue polling even when connected so we detect when host leaves
     _sessionStatusTimer = Timer.periodic(Duration(seconds: SESSION_POLL_INTERVAL), (timer) {
-      if (!mounted || _isConnected) {
-        // Stop polling if widget disposed or user connected
+      if (!mounted) {
+        // Stop polling if widget disposed
         timer.cancel();
         _sessionStatusTimer = null;
         return;
       }
+      // Continue polling even when connected to detect when session ends
       _checkSessionStatus();
     });
   }
@@ -129,9 +144,33 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     _sessionStatusTimer = null;
   }
 
+  /// ✅ NEW: Start recording status polling
+  void _startRecordingStatusPolling() {
+    // Cancel any existing timer first
+    _recordingStatusTimer?.cancel();
+
+    // Initial check
+    _checkRecordingStatus();
+
+    // Then poll every 3 seconds
+    _recordingStatusTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted) {
+        _checkRecordingStatus();
+      }
+    });
+
+    print('🎬 Recording status polling started');
+  }
+
+  /// ✅ NEW: Stop recording status polling
+  void _stopRecordingStatusPolling() {
+    _recordingStatusTimer?.cancel();
+    _recordingStatusTimer = null;
+  }
+
   /// ✅ Check if session is active
   Future<void> _checkSessionStatus() async {
-    if (_checkingSession || _isConnected) return;
+    if (_checkingSession) return;
 
     setState(() => _checkingSession = true);
 
@@ -145,6 +184,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         final wasActive = _isSessionActive;
         final isActive = data['isActive'] ?? false;
 
+        print('📡 Session check - wasActive: $wasActive, isActive: $isActive, connected: $_isConnected');
+
         if (mounted) {
           setState(() {
             _isSessionActive = isActive;
@@ -156,19 +197,63 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             }
           });
 
-          // ✅ OPTIMIZATION: Auto-join when session becomes active (state change)
+          // ✅ Auto-join when session becomes active (state change)
           if (!wasActive && isActive && !_isConnected && !_isJoining) {
             print('✅ Session activated - auto-joining now...');
             _joinChannel();
           }
-        }
 
-        print('📡 Session status: ${isActive ? "✅ Active" : "⏸️ Not started"}');
+          // ✅ Kick out users when host leaves (session becomes inactive)
+          if (wasActive && !isActive && _isConnected) {
+            print('🚪 Host left! Kicking user out immediately...');
+            _showErrorSnackBar('Host ended the call');
+            // Force disconnect and navigate back to home
+            await _forceExitCall();
+          }
+        }
       }
     } catch (e) {
       print('Error checking session status: $e');
       if (mounted) {
         setState(() => _checkingSession = false);
+      }
+    }
+  }
+
+  /// ✅ Force disconnect user and navigate to home (triggered when host leaves)
+  Future<void> _forceExitCall() async {
+    try {
+      print('🚪 Forcing user to exit call...');
+
+      // Leave Agora channel first
+      try {
+        await _agoraEngine.leaveChannel();
+      } catch (e) {
+        print('Error leaving Agora channel: $e');
+      }
+
+      _speakerTracker.reset();
+
+      if (mounted) {
+        setState(() {
+          _isConnected = false;
+          _remoteUsers.clear();
+          _remoteUid = 0;
+          _isMuted = true;
+          _statusMessage = 'Host ended the call';
+        });
+
+        // ✅ Stop recording status polling
+        _stopRecordingStatusPolling();
+
+        // Navigate back to home screen
+        print('🏠 Navigating back to home screen...');
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    } catch (e) {
+      print('Error forcing exit: $e');
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     }
   }
@@ -201,28 +286,54 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   /// ✅ Automatically join the call after Agora is ready
   Future<void> _autoJoinCall() async {
-    // Wait a brief moment for session status to be checked
-    await Future.delayed(const Duration(milliseconds: 500));
+    // Wait longer to ensure Agora engine is fully initialized
+    await Future.delayed(const Duration(milliseconds: 1000));
 
     if (mounted && !_isConnected && !_isJoining) {
       // Check if allowed to join
-      if (_isHost || _isSessionActive) {
+      if (_isHost) {
+        print('🚀 Host auto-joining call and starting session...');
+        // Host starts the session on backend before joining
+        await _startSessionOnBackend();
+        await _joinChannel();
+      } else if (_isSessionActive) {
         print('🚀 Auto-joining call...');
         await _joinChannel();
       } else {
         print('⏸️ Waiting for host to start session before auto-joining');
-        // Start listening for session status changes
-        _waitForSessionAndAutoJoin();
+        // Session polling will trigger auto-join when _isSessionActive becomes true
       }
     }
   }
 
-  /// ✅ Wait for session to become active, then auto-join
-  /// OPTIMIZATION: Rely on session polling instead of separate timer
-  void _waitForSessionAndAutoJoin() {
-    // Session polling will trigger auto-join when _isSessionActive becomes true
-    // No need for a separate timer - reduces overhead
-    print('⏸️ Waiting for session to become active (via existing polling)...');
+  /// ✅ Start session on backend (host-only)
+  Future<void> _startSessionOnBackend() async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null) {
+        print('⚠️ No auth token available, skipping session start');
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('$_backendUrl/session/$_channelName/start'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        print('✅ Session started on backend');
+        setState(() {
+          _isSessionActive = true;
+        });
+      } else {
+        print('⚠️ Failed to start session: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Error starting session on backend: $e');
+    }
   }
 
   Future<void> _requestMicrophonePermission() async {
@@ -285,14 +396,14 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           print('✅ Joined channel successfully');
           _speakerTracker.start();
 
-          // ✅ Stop session polling once connected
-          _stopSessionStatusPolling();
+          // ✅ Keep polling for non-host users so they can detect when host leaves
+          // (Don't stop polling - we need it to kick out users when session ends)
 
           // ✅ Register user in session
           _registerUserInSession(connection.localUid ?? 0);
 
-          // ✅ Check recording status when joined
-          _checkRecordingStatus();
+          // ✅ Check recording status when joined & start polling
+          _startRecordingStatusPolling();
 
           setState(() {
             _uid = connection.localUid ?? 0;
@@ -309,6 +420,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             _remoteUsers.add(remoteUid);
             _remoteUid = remoteUid;
           });
+
+          // ✅ Apply muting IMMEDIATELY - for non-host users, mute all by default
+          // This prevents audio from other users, only unmute admin when identified
+          if (!_isHost) {
+            print('🔇 User role: Muting all remote users by default');
+            _agoraEngine.muteRemoteAudioStream(uid: remoteUid, mute: true);
+          }
 
           // ✅ SELECTIVE AUDIO: If current user is not host, mute all clients (only hear admin)
           _applySelectiveAudioSubscription(remoteUid);
@@ -416,13 +534,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   Future<void> _joinChannel() async {
     if (_isJoining || _isConnected) {
-      _showErrorSnackBar('Already joining or connected');
+      print('⚠️ Already joining or connected - skipping join attempt');
       return;
     }
 
     // ✅ Check if user is allowed to join (non-host users need active session)
     if (!_isHost && !_isSessionActive) {
-      _showErrorSnackBar('⏸️ Waiting for host to start the session');
+      print('⏸️ Waiting for host to start the session');
       return;
     }
 
@@ -441,15 +559,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         throw Exception('Token is null');
       }
 
-      // ✅ FIX: For users (non-host), set default to mute all remote streams
-      // Then we'll selectively unmute the admin when we learn their UID
-      if (!_isHost) {
-        print('🔇 User: Setting default to mute all remote streams (will unmute admin later)');
-        await _agoraEngine.setDefaultMuteAllRemoteAudioStreams(true);
-      } else {
-        print('👑 Admin: Subscribing to all remote streams by default');
-        await _agoraEngine.setDefaultMuteAllRemoteAudioStreams(false);
-      }
+      print('🎯 Joining channel with UID: $_uid, Token: ${_agoraToken!.substring(0, 20)}...');
 
       await _agoraEngine.joinChannel(
         token: _agoraToken!,
@@ -485,6 +595,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   Future<void> _leaveChannel() async {
     try {
+      // ✅ Host stops the session on backend (users will be kicked out)
+      if (_isHost) {
+        await _stopSessionOnBackend();
+      }
+
       await _agoraEngine.leaveChannel();
       _speakerTracker.reset();
 
@@ -495,6 +610,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         _isMuted = true; // Reset to muted when leaving
         _statusMessage = 'Disconnected';
       });
+
+      // ✅ Stop recording status polling when leaving
+      _stopRecordingStatusPolling();
 
       // ✅ Restart polling for non-host users after leaving
       if (!_isHost && mounted) {
@@ -507,6 +625,36 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     } catch (e) {
       print('Error leaving channel: $e');
       _showErrorSnackBar('Error leaving channel: $e');
+    }
+  }
+
+  /// ✅ Stop session on backend (host-only) - kicks out all users
+  Future<void> _stopSessionOnBackend() async {
+    try {
+      final token = await _authService.getToken();
+      if (token == null) {
+        print('⚠️ No auth token available, skipping session stop');
+        return;
+      }
+
+      final response = await http.post(
+        Uri.parse('$_backendUrl/session/$_channelName/stop'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        print('✅ Session stopped on backend - users will be kicked out');
+        setState(() {
+          _isSessionActive = false;
+        });
+      } else {
+        print('⚠️ Failed to stop session: ${response.statusCode} - ${response.body}');
+      }
+    } catch (e) {
+      print('❌ Error stopping session on backend: $e');
     }
   }
 
@@ -641,19 +789,19 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                   ? hostUid as int
                   : int.parse(hostUid.toString());
               print('👑 Host UID identified from user list: $_hostUid');
-
-              // ✅ Re-apply selective audio subscription if we just learned the host UID
-              if (!_isHost) {
-                print('🔄 Re-applying audio filters (from fetchUsernames) for host UID: $_hostUid');
-                print('📋 Remote users: $_remoteUsers');
-                for (final remoteUid in _remoteUsers) {
-                  print('   → Processing UID: $remoteUid (isHost: ${remoteUid == _hostUid})');
-                  await _applySelectiveAudioSubscription(remoteUid);
-                }
-                print('✅ Finished re-applying filters (from fetchUsernames)');
-              }
             }
           });
+
+          // ✅ Re-apply selective audio subscription if we just learned the host UID
+          if (!_isHost && _hostUid != null) {
+            print('🔄 Re-applying audio filters (from fetchUsernames) for host UID: $_hostUid');
+            print('📋 Remote users: $_remoteUsers');
+            for (final remoteUid in _remoteUsers) {
+              print('   → Processing UID: $remoteUid (isHost: ${remoteUid == _hostUid})');
+              await _applySelectiveAudioSubscription(remoteUid);
+            }
+            print('✅ Finished re-applying filters (from fetchUsernames)');
+          }
         }
       }
     } catch (e) {
@@ -667,6 +815,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
     try {
       await _agoraEngine.muteLocalAudioStream(false);
+
+      // ✅ NEW: Start audio recording when unmuting (for users)
+      if (!_isHost && !_isRecordingAudio) {
+        await _startAudioRecording();
+      }
+
       setState(() {
         _isMuted = false;
       });
@@ -682,12 +836,127 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
     try {
       await _agoraEngine.muteLocalAudioStream(true);
+
+      // ✅ NEW: Stop audio recording when muting (for users)
+      if (!_isHost && _isRecordingAudio) {
+        await _stopAudioRecording();
+      }
+
       setState(() {
         _isMuted = true;
       });
       print('🔇 Muted - Listening');
     } catch (e) {
       print('Error muting: $e');
+    }
+  }
+
+  /// ✅ NEW: Start audio recording for hold-to-speak
+  Future<void> _startAudioRecording() async {
+    try {
+      if (await _audioRecorder.hasPermission()) {
+        final dir = await getApplicationDocumentsDirectory();
+        final fileName = 'recording_${_uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+        final filePath = '${dir.path}/$fileName';
+
+        await _audioRecorder.start(
+          const RecordConfig(encoder: AudioEncoder.aacLc),
+          path: filePath,
+        );
+
+        setState(() {
+          _isRecordingAudio = true;
+          _recordingStartTime = DateTime.now();
+        });
+
+        print('🎙️ Recording started - UID: $_uid, Path: $filePath');
+      } else {
+        print('❌ Microphone permission denied');
+        _showErrorSnackBar('Microphone permission required');
+      }
+    } catch (e) {
+      print('Error starting recording: $e');
+      _showErrorSnackBar('Failed to start recording: $e');
+    }
+  }
+
+  /// ✅ NEW: Stop audio recording and upload
+  Future<void> _stopAudioRecording() async {
+    try {
+      final recordingPath = await _audioRecorder.stop();
+
+      if (recordingPath != null && _recordingStartTime != null) {
+        final durationMs = DateTime.now().difference(_recordingStartTime!).inMilliseconds;
+
+        setState(() {
+          _isRecordingAudio = false;
+        });
+
+        // Upload to backend
+        await _uploadRecording(File(recordingPath), durationMs);
+
+        print('✅ Recording saved and uploaded - Duration: ${durationMs}ms');
+      }
+    } catch (e) {
+      print('Error stopping recording: $e');
+      _showErrorSnackBar('Failed to save recording: $e');
+      setState(() {
+        _isRecordingAudio = false;
+      });
+    }
+  }
+
+  /// ✅ NEW: Upload recording to backend
+  Future<void> _uploadRecording(File audioFile, int durationMs) async {
+    try {
+      final uri = Uri.parse('$_backendUrl/recordings/save');
+      final request = http.MultipartRequest('POST', uri);
+
+      // Add file
+      request.files.add(
+        await http.MultipartFile.fromPath('audioFile', audioFile.path),
+      );
+
+      // Add metadata
+      request.fields['userId'] = _uid.toString();
+      request.fields['sessionId'] = _channelName;
+      request.fields['durationMs'] = durationMs.toString();
+
+      final response = await request.send().timeout(const Duration(seconds: 30));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseBody = await response.stream.bytesToString();
+        final data = jsonDecode(responseBody);
+
+        // Create Recording object
+        final recording = Recording(
+          id: data['recordingId'] ?? 'rec_${DateTime.now().millisecondsSinceEpoch}',
+          userId: _uid,
+          sessionId: _channelName,
+          filename: audioFile.path.split('/').last,
+          url: data['url'] ?? audioFile.path,
+          recordedAt: DateTime.now().toIso8601String(),
+          durationMs: durationMs,
+        );
+
+        setState(() {
+          _userRecordings.add(recording);
+        });
+
+        _showSuccessSnackBar('Recording saved! 🎙️');
+        print('📤 Recording uploaded successfully');
+      } else {
+        print('❌ Upload failed: ${response.statusCode}');
+        _showErrorSnackBar('Failed to upload recording');
+      }
+
+      // Clean up local file
+      if (audioFile.existsSync()) {
+        audioFile.deleteSync();
+      }
+    } catch (e) {
+      print('Error uploading recording: $e');
+      _showErrorSnackBar('Failed to upload recording: $e');
     }
   }
 
@@ -712,10 +981,22 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     );
   }
 
+  void _showSuccessSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _stopSessionStatusPolling(); // ✅ FIX: Clean up polling timer
+    _stopRecordingStatusPolling(); // ✅ NEW: Clean up recording status polling
     _usernamesFetchTimer?.cancel(); // ✅ Clean up username fetch timer
+    _audioRecorder.dispose(); // ✅ NEW: Clean up audio recorder
     _leaveChannelAndDestroy();
     _speakerTracker.dispose();
     super.dispose();
@@ -854,7 +1135,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               ),
             if (!_isHost && !_isConnected) const SizedBox(height: 16),
 
-            // Control buttons (Speaker, Bluetooth, Exit Room)
+            // Control buttons (Speaker, Bluetooth, My Recordings, Exit Room)
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -876,6 +1157,23 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                     label: 'Bluetooth',
                     color: const Color(0xFF00D4FF),
                   ),
+                  // ✅ NEW: My Recordings button (for non-host users)
+                  if (!_isHost)
+                    _buildControlButton(
+                      icon: Icons.music_note,
+                      label: 'Recordings',
+                      color: const Color(0xFF00FF41),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => UserRecordingsScreen(
+                              sessionId: _channelName,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
                   _buildControlButton(
                     icon: Icons.close,
                     label: 'Exit Room',
@@ -892,85 +1190,108 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ✅ Microphone button
-                  // Host/Admin: Tap to toggle mute/unmute
-                  // Regular User: Hold to talk (push-to-talk)
-                  GestureDetector(
-                    // Host: Tap to toggle
-                    onTap: _isHost && _isConnected ? () async {
-                      await _toggleMute();
-                    } : null,
-                    // Regular User: Hold to talk
-                    onTapDown: !_isHost && _isConnected ? (details) async {
-                      await _unmute(); // Unmute when pressing down
-                    } : null,
-                    onTapUp: !_isHost && _isConnected ? (details) async {
-                      await _mute(); // Mute when releasing
-                    } : null,
-                    onTapCancel: !_isHost && _isConnected ? () async {
-                      await _mute(); // Mute if gesture is cancelled
-                    } : null,
-                    child: Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: _isJoining
-                                ? const Color(0xFFFFCD00).withOpacity(0.6)
-                                : (!_isHost && !_isSessionActive && !_isConnected)
-                                    ? Colors.grey.withOpacity(0.3) // ✅ Grey when disabled
-                                    : _isMuted
-                                        ? const Color(0xFFFF4757).withOpacity(0.6) // Red when muted
-                                        : const Color(0xFF00FF41).withOpacity(0.6), // Green when speaking
-                            blurRadius: 30,
-                            spreadRadius: 5,
-                          ),
-                        ],
-                      ),
-                      child: Container(
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: _isJoining
-                                ? const Color(0xFFFFCD00).withOpacity(0.4)
-                                : (!_isHost && !_isSessionActive && !_isConnected)
-                                    ? Colors.grey.withOpacity(0.3) // ✅ Grey border when disabled
-                                    : _isMuted
-                                        ? const Color(0xFFFF4757).withOpacity(0.4) // Red border when muted
-                                        : const Color(0xFF00FF41).withOpacity(0.4), // Green border when speaking
-                            width: 3,
-                          ),
-                        ),
+                  // ✅ Microphone button with recording indicator badge
+                  Stack(
+                    alignment: Alignment.topRight,
+                    children: [
+                      GestureDetector(
+                        // Host: Tap to toggle
+                        onTap: _isHost && _isConnected ? () async {
+                          await _toggleMute();
+                        } : null,
+                        // Regular User: Hold to talk
+                        onTapDown: !_isHost && _isConnected ? (details) async {
+                          await _unmute(); // Unmute when pressing down
+                        } : null,
+                        onTapUp: !_isHost && _isConnected ? (details) async {
+                          await _mute(); // Mute when releasing
+                        } : null,
+                        onTapCancel: !_isHost && _isConnected ? () async {
+                          await _mute(); // Mute if gesture is cancelled
+                        } : null,
                         child: Container(
+                          width: 140,
+                          height: 140,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _isJoining
-                                ? const Color(0xFFFFCD00)
-                                : (!_isHost && !_isSessionActive && !_isConnected)
-                                    ? Colors.grey // ✅ Grey when disabled
-                                    : _isMuted
-                                        ? const Color(0xFFFF4757) // Red when muted
-                                        : const Color(0xFF00FF41), // Green when speaking
+                            boxShadow: [
+                              BoxShadow(
+                                color: _isJoining
+                                    ? const Color(0xFFFFCD00).withOpacity(0.6)
+                                    : (!_isHost && !_isSessionActive && !_isConnected)
+                                        ? Colors.grey.withOpacity(0.3) // ✅ Grey when disabled
+                                        : _isMuted
+                                            ? const Color(0xFFFF4757).withOpacity(0.6) // Red when muted
+                                            : const Color(0xFF00FF41).withOpacity(0.6), // Green when speaking
+                                blurRadius: 30,
+                                spreadRadius: 5,
+                              ),
+                            ],
                           ),
-                          child: _isJoining
-                              ? const SizedBox(
-                                  width: 60,
-                                  height: 60,
-                                  child: CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                    strokeWidth: 3,
-                                  ),
-                                )
-                              : Icon(
-                                  _isMuted ? Icons.mic_off : Icons.mic,
-                                  size: 60,
-                                  color: Colors.white,
-                                ),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: _isJoining
+                                    ? const Color(0xFFFFCD00).withOpacity(0.4)
+                                    : (!_isHost && !_isSessionActive && !_isConnected)
+                                        ? Colors.grey.withOpacity(0.3) // ✅ Grey border when disabled
+                                        : _isMuted
+                                            ? const Color(0xFFFF4757).withOpacity(0.4) // Red border when muted
+                                            : const Color(0xFF00FF41).withOpacity(0.4), // Green border when speaking
+                                width: 3,
+                              ),
+                            ),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: _isJoining
+                                    ? const Color(0xFFFFCD00)
+                                    : (!_isHost && !_isSessionActive && !_isConnected)
+                                        ? Colors.grey // ✅ Grey when disabled
+                                        : _isMuted
+                                            ? const Color(0xFFFF4757) // Red when muted
+                                            : const Color(0xFF00FF41), // Green when speaking
+                              ),
+                              child: _isJoining
+                                  ? const SizedBox(
+                                      width: 60,
+                                      height: 60,
+                                      child: CircularProgressIndicator(
+                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                                        strokeWidth: 3,
+                                      ),
+                                    )
+                                  : Icon(
+                                      _isMuted ? Icons.mic_off : Icons.mic,
+                                      size: 60,
+                                      color: Colors.white,
+                                    ),
+                            ),
+                          ),
                         ),
                       ),
-                    ),
+                      // ✅ NEW: Recording indicator badge
+                      if (_isRecordingAudio)
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.red,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.red.withOpacity(0.8),
+                                blurRadius: 8,
+                                spreadRadius: 2,
+                              ),
+                            ],
+                          ),
+                          child: const Text(
+                            '🔴',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                    ],
                   ),
                   const SizedBox(height: 32),
 

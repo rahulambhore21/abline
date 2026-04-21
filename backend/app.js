@@ -6,6 +6,9 @@ const { RtcTokenBuilder, RtcRole } = require('agora-access-token');
 const axios = require('axios');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const fileUpload = require('express-fileupload');
+const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -13,6 +16,7 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use(fileUpload()); // ✅ NEW: Enable file upload for recording save endpoint
 
 // Environment variables
 const AGORA_APP_ID = process.env.AGORA_APP_ID;
@@ -1663,6 +1667,188 @@ app.get('/recordings', (req, res) => {
     console.error('Error fetching recordings:', error);
     res.status(500).json({
       error: 'Failed to fetch recordings',
+    });
+  }
+});
+
+/**
+ * ✅ NEW: POST /recordings/save
+ * Save audio file uploaded from Flutter app (hold-to-speak recording)
+ * Multipart FormData:
+ *   - audioFile: binary audio file
+ *   - userId: number
+ *   - sessionId: string
+ *   - durationMs: number
+ */
+app.post('/recordings/save', async (req, res) => {
+  try {
+    const { userId, sessionId, durationMs } = req.body;
+    const audioFile = req.files?.audioFile;
+
+    if (!userId || !sessionId || !audioFile) {
+      return res.status(400).json({
+        error: 'Missing required fields: userId, sessionId, audioFile',
+      });
+    }
+
+    // Generate unique filename
+    const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const filename = `${recordingId}.m4a`;
+
+    // For now, store locally in a recordings folder (in production, use S3)
+    const recordingsDir = path.join(__dirname, 'recordings');
+    if (!fs.existsSync(recordingsDir)) {
+      fs.mkdirSync(recordingsDir, { recursive: true });
+    }
+
+    const filePath = path.join(recordingsDir, filename);
+
+    // Save file locally
+    await audioFile.mv(filePath);
+
+    // Store recording metadata
+    const recording = {
+      id: recordingId,
+      userId: Number(userId),
+      sessionId,
+      filename,
+      url: `/recordings/download/${recordingId}`, // URL to download the file
+      recordedAt: new Date().toISOString(),
+      durationMs: Number(durationMs) || 0,
+    };
+
+    recordingsStorage.set(recordingId, recording);
+    cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
+
+    console.log(`✅ Recording saved: User ${userId}, Session ${sessionId}, Duration ${durationMs}ms`);
+
+    res.status(201).json({
+      success: true,
+      recordingId,
+      url: recording.url,
+      message: `Recording saved for user ${userId}`,
+    });
+  } catch (error) {
+    console.error('❌ Error saving recording:', error);
+    res.status(500).json({
+      error: 'Failed to save recording',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * ✅ NEW: GET /recordings/user/:userId
+ * Get all recordings for a specific user in a session
+ * Query params: ?sessionId=test_room
+ */
+app.get('/recordings/user/:userId', (req, res) => {
+  try {
+    const userId = Number(req.params.userId);
+    const { sessionId } = req.query;
+
+    let recordings = Array.from(recordingsStorage.values());
+
+    // Filter by userId
+    recordings = recordings.filter(r => r.userId === userId);
+
+    // Optionally filter by sessionId
+    if (sessionId) {
+      recordings = recordings.filter(r => r.sessionId === sessionId);
+    }
+
+    // Sort by recordedAt (newest first)
+    recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+
+    console.log(`📋 Fetched ${recordings.length} recordings for user ${userId}`);
+
+    res.json({
+      total: recordings.length,
+      recordings,
+    });
+  } catch (error) {
+    console.error('Error fetching user recordings:', error);
+    res.status(500).json({
+      error: 'Failed to fetch user recordings',
+    });
+  }
+});
+
+/**
+ * ✅ NEW: GET /recordings/session/:sessionId
+ * Get all recordings for a session, organized by user (admin view)
+ * Requires: host role
+ */
+app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), (req, res) => {
+  try {
+    const sessionId = req.params.sessionId;
+
+    let recordings = Array.from(recordingsStorage.values());
+
+    // Filter by sessionId
+    recordings = recordings.filter(r => r.sessionId === sessionId);
+
+    // Group by userId
+    const byUser = {};
+    recordings.forEach(r => {
+      if (!byUser[r.userId]) {
+        byUser[r.userId] = [];
+      }
+      byUser[r.userId].push(r);
+    });
+
+    // Sort recordings within each user by recordedAt (newest first)
+    Object.keys(byUser).forEach(userId => {
+      byUser[userId].sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+    });
+
+    console.log(`📋 Fetched ${recordings.length} recordings for session ${sessionId}`);
+
+    res.json({
+      total: recordings.length,
+      recordings,
+      byUser,
+    });
+  } catch (error) {
+    console.error('Error fetching session recordings:', error);
+    res.status(500).json({
+      error: 'Failed to fetch session recordings',
+    });
+  }
+});
+
+/**
+ * ✅ NEW: GET /recordings/download/:recordingId
+ * Download a specific recording file
+ */
+app.get('/recordings/download/:recordingId', (req, res) => {
+  try {
+    const recording = recordingsStorage.get(req.params.recordingId);
+
+    if (!recording) {
+      return res.status(404).json({
+        error: 'Recording not found',
+      });
+    }
+
+    const filePath = path.join(__dirname, 'recordings', recording.filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).json({
+        error: 'Recording file not found',
+      });
+    }
+
+    // Send file with appropriate headers
+    res.setHeader('Content-Type', 'audio/mp4');
+    res.setHeader('Content-Disposition', `attachment; filename="${recording.filename}"`);
+    res.sendFile(filePath);
+
+    console.log(`📥 Downloaded recording: ${recording.filename}`);
+  } catch (error) {
+    console.error('Error downloading recording:', error);
+    res.status(500).json({
+      error: 'Failed to download recording',
     });
   }
 });

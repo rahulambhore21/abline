@@ -47,6 +47,12 @@ dependencies:
   # Audio playback for recordings
   just_audio: ^0.9.36
 
+  # Audio recording for hold-to-speak feature (latest stable for Android)
+  record: ^6.2.0
+
+  # File path utilities for storing recordings
+  path_provider: ^2.1.1
+
   # Local storage for JWT token and user preferences
   shared_preferences: ^2.2.0
 
