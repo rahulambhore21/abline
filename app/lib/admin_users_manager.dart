@@ -197,7 +197,10 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                   ),
                 ],
               ),
-              Column(
+              // ✅ FIXED: Wrap buttons to prevent overflow
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   ElevatedButton.icon(
                     onPressed: _showCreateUserDialog,
@@ -212,7 +215,6 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
                   ElevatedButton.icon(
                     onPressed: _loadUsers,
                     icon: const Icon(Icons.refresh),

@@ -283,7 +283,10 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                   ),
                 ],
               ),
-              Column(
+              // ✅ FIXED: Wrap buttons to prevent overflow
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
                   ElevatedButton.icon(
                     onPressed: _showStartRecordingDialog,
@@ -298,7 +301,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
                   ElevatedButton.icon(
                     onPressed: _loadRecordingData,
                     icon: const Icon(Icons.refresh),
