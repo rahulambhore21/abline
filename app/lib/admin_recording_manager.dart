@@ -18,8 +18,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   late AuthService _authService;
   List<Map<String, dynamic>> _activeRecordings = [];
   List<Map<String, dynamic>> _speakingEvents = [];
-  Map<int, List<Recording>> _recordingsByUser = {}; // ✅ NEW: Recordings grouped by user
-  List<Recording> _allSessionRecordings = []; // ✅ NEW: All recordings in session
+  Map<String, List<Recording>> _recordingsByUser = {}; // ✅ FIXED: Use String key for userId
+  List<Recording> _allSessionRecordings = [];
   bool _isLoading = true;
   String _error = '';
 
@@ -69,15 +69,18 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
           },
         );
 
+        print('📡 Session recordings response: ${userRecordingsResponse.statusCode}');
+
         if (userRecordingsResponse.statusCode == 200) {
           final data = jsonDecode(userRecordingsResponse.body);
           final recordingsList = (data['recordings'] as List?)
               ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
               .toList() ?? [];
 
+          // ✅ FIXED: Keep userId as String (don't convert to int)
           final byUser = (data['byUser'] as Map?)?.map(
             (userId, recordings) => MapEntry(
-              int.parse(userId.toString()),
+              userId.toString(), // Keep as string
               (recordings as List)
                   .map((r) => Recording.fromJson(r as Map<String, dynamic>))
                   .toList(),
@@ -90,9 +93,13 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
           });
 
           print('✅ Loaded ${recordingsList.length} session recordings');
+          print('✅ Users with recordings: ${byUser.keys.toList()}');
+        } else {
+          print('⚠️ Session recordings response: ${userRecordingsResponse.statusCode}');
+          print('📄 Body: ${userRecordingsResponse.body}');
         }
       } catch (e) {
-        print('Note: User recordings not available: $e');
+        print('❌ Error loading user recordings: $e');
         // Don't treat this as a fatal error
       }
 
@@ -470,6 +477,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                 children: _recordingsByUser.entries.map((entry) {
                   final userId = entry.key;
                   final recordings = entry.value;
+                  // Show shortened userId for display (first 8 chars of ObjectId)
+                  final shortUserId = userId.length > 8 ? userId.substring(0, 8) : userId;
 
                   return Container(
                     margin: const EdgeInsets.only(bottom: 20),
@@ -493,10 +502,10 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                 ),
                                 child: Center(
                                   child: Text(
-                                    'U$userId',
+                                    shortUserId,
                                     style: const TextStyle(
                                       color: Color(0xFF00FF41),
-                                      fontSize: 12,
+                                      fontSize: 11,
                                       fontWeight: FontWeight.bold,
                                     ),
                                   ),
@@ -508,7 +517,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'User #$userId',
+                                      'User: $shortUserId',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,
