@@ -865,7 +865,7 @@ app.post('/auth/login', async (req, res) => {
       success: true,
       token,
       role: user.role,
-      userId: user._id,
+      userId: user._id.toString(), // ✅ FIXED: Convert ObjectId to string
       username: user.username,
       expiresIn: JWT_EXPIRY,
       message: 'Login successful',

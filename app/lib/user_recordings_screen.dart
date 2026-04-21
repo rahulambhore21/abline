@@ -45,35 +45,47 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
 
       // Get user ID
       final userIdStr = await _authService.getUserId();
+      print('📋 Retrieved userId from AuthService: $userIdStr');
+
       if (userIdStr == null || userIdStr.isEmpty) {
         setState(() {
-          _error = 'User ID not found';
+          _error = 'User ID not found - Please login again';
           _isLoading = false;
         });
         return;
       }
 
+      // Parse userId - handle both string formats
       _userId = int.tryParse(userIdStr) ?? 0;
+
+      // If parsing failed, try to extract from MongoDB ObjectId string
       if (_userId == 0) {
-        setState(() {
-          _error = 'Invalid user ID';
-          _isLoading = false;
-        });
-        return;
+        // Try parsing as-is (MongoDB ObjectId strings are hex)
+        // For now, just use the string as-is for the API call
+        print('⚠️ Could not parse userId as int: $userIdStr, using string as-is');
+        _userId = 0;
       }
+
+      print('✅ Parsed userId: $_userId');
+
+      // Construct the URL - use userIdStr if _userId is 0
+      final userIdForUrl = _userId > 0 ? _userId.toString() : userIdStr;
+      final url = '$_backendUrl/recordings/user/$userIdForUrl?sessionId=${widget.sessionId}';
+      print('🌐 Fetching recordings from: $url');
 
       // Fetch recordings
       final response = await http
-          .get(Uri.parse(
-            '$_backendUrl/recordings/user/$_userId?sessionId=${widget.sessionId}',
-          ))
+          .get(Uri.parse(url))
           .timeout(const Duration(seconds: 10));
+
+      print('📡 Response status: ${response.statusCode}');
+      print('📄 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final recordings = (data['recordings'] as List)
-            .map((r) => Recording.fromJson(r as Map<String, dynamic>))
-            .toList();
+        final recordings = (data['recordings'] as List?)
+            ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
+            .toList() ?? [];
 
         setState(() {
           _recordings = recordings;
