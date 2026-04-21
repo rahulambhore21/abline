@@ -67,12 +67,15 @@ const SpeakingEventSchema = new mongoose.Schema(
   {
     userId: { type: Number, required: true, index: true },
     sessionId: { type: String, required: true, index: true },
-    start: { type: Date, required: true },
+    start: { type: Date, required: true, index: true }, // ✅ OPTIMIZATION: Index for date queries
     end: { type: Date, required: true },
     durationMs: { type: Number, required: true },
   },
   { timestamps: true }
 );
+
+// ✅ OPTIMIZATION: Compound index for efficient querying by session and user
+SpeakingEventSchema.index({ sessionId: 1, userId: 1, start: -1 });
 
 const SpeakingEventModel = mongoose.model('SpeakingEvent', SpeakingEventSchema);
 
@@ -95,6 +98,7 @@ const UserSchema = new mongoose.Schema(
       unique: true,
       trim: true,
       minlength: [3, 'Username must be at least 3 characters'],
+      index: true, // ✅ OPTIMIZATION: Index for faster lookups
     },
     password: {
       type: String,
@@ -107,10 +111,14 @@ const UserSchema = new mongoose.Schema(
       enum: ['host', 'user'],
       default: 'user',
       required: true,
+      index: true, // ✅ OPTIMIZATION: Index for role-based queries
     },
   },
   { timestamps: true }
 );
+
+// ✅ OPTIMIZATION: Compound index for username + role queries
+UserSchema.index({ username: 1, role: 1 });
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
@@ -237,19 +245,87 @@ const activeRecordings = new Map(); // Store active recordings in memory
 /**
  * In-memory session storage for demo purposes
  * Structure: Map<sessionId, { sessionId, users: Map<userId, {userId, username, isSpeaking}> }>
+ * ✅ OPTIMIZATION: Added cleanup mechanism for inactive sessions
  */
 const activeSessions = new Map();
+const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/**
+ * ✅ OPTIMIZATION: Cleanup inactive sessions to prevent memory leak
+ */
+function cleanupInactiveSessions() {
+  const now = Date.now();
+  const sessionsToDelete = [];
+
+  for (const [sessionId, session] of activeSessions.entries()) {
+    // Remove sessions that have been stopped for > 24 hours
+    if (session.stoppedAt) {
+      const timeSinceStopped = now - new Date(session.stoppedAt).getTime();
+      if (timeSinceStopped > SESSION_TIMEOUT_MS) {
+        sessionsToDelete.push(sessionId);
+      }
+    }
+    // Remove sessions with 0 users that haven't been active
+    else if (session.users.size === 0 && !session.isActive) {
+      sessionsToDelete.push(sessionId);
+    }
+  }
+
+  for (const sessionId of sessionsToDelete) {
+    activeSessions.delete(sessionId);
+  }
+
+  if (sessionsToDelete.length > 0) {
+    console.log(`🧹 Cleaned up ${sessionsToDelete.length} inactive sessions`);
+  }
+}
+
+// ✅ OPTIMIZATION: Run cleanup every hour
+setInterval(cleanupInactiveSessions, 60 * 60 * 1000);
 
 /**
  * In-memory recordings storage
  * Structure: Map<recordingId, { id, userId, sessionId, url, recordedAt, filename }>
+ * ✅ OPTIMIZATION: Added size limit
  */
 const recordingsStorage = new Map();
+const MAX_RECORDINGS = 500; // Limit to 500 recordings in memory
+
+/**
+ * ✅ OPTIMIZATION: Cleanup old recordings to prevent memory leak
+ */
+function cleanupOldRecordings() {
+  if (recordingsStorage.size > MAX_RECORDINGS) {
+    // Convert to array, sort by date, keep most recent
+    const recordings = Array.from(recordingsStorage.entries());
+    recordings.sort((a, b) => new Date(b[1].recordedAt) - new Date(a[1].recordedAt));
+
+    recordingsStorage.clear();
+    recordings.slice(0, MAX_RECORDINGS).forEach(([id, rec]) => {
+      recordingsStorage.set(id, rec);
+    });
+
+    console.log(`🧹 Cleaned up old recordings. Kept ${recordingsStorage.size} most recent.`);
+  }
+}
 
 /**
  * In-memory speaking events (fallback when MongoDB is not configured)
+ * ✅ OPTIMIZATION: Added size limit to prevent unbounded growth
  */
 let speakingEvents = [];
+const MAX_SPEAKING_EVENTS = 1000; // Limit to 1000 events in memory
+
+/**
+ * ✅ OPTIMIZATION: Cleanup old speaking events to prevent memory leak
+ */
+function cleanupOldSpeakingEvents() {
+  if (speakingEvents.length > MAX_SPEAKING_EVENTS) {
+    // Keep only the most recent events
+    speakingEvents = speakingEvents.slice(-MAX_SPEAKING_EVENTS);
+    console.log(`🧹 Cleaned up old speaking events. Kept ${speakingEvents.length} most recent.`);
+  }
+}
 
 /**
  * Create basic auth header for Agora Cloud Recording API
@@ -683,7 +759,8 @@ app.get('/users', authMiddleware, allowRole('host'), async (req, res) => {
   try {
     if (!ensureMongoForAuth(res)) return;
 
-    const users = await UserModel.find().select('_id username role createdAt');
+    // ✅ OPTIMIZATION: Use lean() for faster queries (returns plain JS objects)
+    const users = await UserModel.find().select('_id username role createdAt').lean();
 
     res.json({
       success: true,
@@ -1220,6 +1297,7 @@ app.post('/events/speaking', async (req, res) => {
     } else {
       // Fallback: store in-memory
       speakingEvents.push(event);
+      cleanupOldSpeakingEvents(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
     }
 
     console.log(
@@ -1622,6 +1700,7 @@ app.post('/recordings/add', (req, res) => {
     };
 
     recordingsStorage.set(recordingId, recording);
+    cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
 
     res.status(201).json({
       success: true,

@@ -5,8 +5,36 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// AuthService handles JWT token management, login, registration, and API calls
 class AuthService {
   final String backendUrl;
-  
+
+  // ✅ OPTIMIZATION: Cache frequently accessed values to avoid SharedPreferences reads
+  String? _cachedToken;
+  String? _cachedRole;
+  String? _cachedUserId;
+  String? _cachedUsername;
+  bool _cacheInitialized = false;
+
   AuthService({required this.backendUrl});
+
+  /// ✅ OPTIMIZATION: Initialize cache from SharedPreferences on first access
+  Future<void> _initializeCache() async {
+    if (_cacheInitialized) return;
+
+    final prefs = await SharedPreferences.getInstance();
+    _cachedToken = prefs.getString('auth_token');
+    _cachedRole = prefs.getString('user_role');
+    _cachedUserId = prefs.getString('user_id');
+    _cachedUsername = prefs.getString('username');
+    _cacheInitialized = true;
+  }
+
+  /// ✅ OPTIMIZATION: Clear cache when values change
+  void _invalidateCache() {
+    _cacheInitialized = false;
+    _cachedToken = null;
+    _cachedRole = null;
+    _cachedUserId = null;
+    _cachedUsername = null;
+  }
 
   /// Login with username and password, returns JWT token or null on failure
   Future<LoginResponse?> login(String username, String password) async {
@@ -103,28 +131,28 @@ class AuthService {
     }
   }
 
-  /// Get stored JWT token
+  /// Get stored JWT token (cached)
   Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+    await _initializeCache();
+    return _cachedToken;
   }
 
-  /// Get stored user role (host or user)
+  /// Get stored user role (host or user) (cached)
   Future<String?> getRole() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_role');
+    await _initializeCache();
+    return _cachedRole;
   }
 
-  /// Get stored user ID
+  /// Get stored user ID (cached)
   Future<String?> getUserId() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('user_id');
+    await _initializeCache();
+    return _cachedUserId;
   }
 
-  /// Get stored username
+  /// Get stored username (cached)
   Future<String?> getUsername() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('username');
+    await _initializeCache();
+    return _cachedUsername;
   }
 
   /// Check if user is authenticated
@@ -146,6 +174,7 @@ class AuthService {
     await prefs.remove('user_role');
     await prefs.remove('user_id');
     await prefs.remove('username');
+    _invalidateCache(); // ✅ OPTIMIZATION: Clear cache on logout
   }
 
   /// Make authenticated HTTP GET request
@@ -179,24 +208,29 @@ class AuthService {
   Future<void> _saveToken(String token) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('auth_token', token);
+    _cachedToken = token; // ✅ OPTIMIZATION: Update cache
   }
 
   /// Save role to local storage
   Future<void> _saveRole(String role) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_role', role);
+    _cachedRole = role; // ✅ OPTIMIZATION: Update cache
   }
 
   /// Save user ID to local storage
   Future<void> _saveUserId(String userId) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('user_id', userId);
+    _cachedUserId = userId; // ✅ OPTIMIZATION: Update cache
   }
 
   /// Save username to local storage
   Future<void> _saveUsername(String username) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString('username', username);
+    _cachedUsername = username; // ✅ OPTIMIZATION: Update cache
+    _cacheInitialized = true; // Mark cache as initialized after saving
   }
 }
 

@@ -36,11 +36,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// ✅ Poll session status to check if host has started the call
+  /// OPTIMIZATION: Increased from 3s to 5s to reduce network load
   void _startSessionStatusPolling() {
     _checkSessionStatus(); // Initial check
 
-    // Poll every 3 seconds
-    _sessionStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    // Poll every 5 seconds (optimized from 3)
+    _sessionStatusTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
       if (!mounted) {
         timer.cancel();
         return;

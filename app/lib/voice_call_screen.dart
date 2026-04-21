@@ -36,7 +36,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   List<int> _remoteUsers = [];
   String _statusMessage = 'Disconnected';
   List<SpeakingEvent> _speakingEvents = [];
-  bool _isMuted = true; // ✅ Start muted, user holds to talk
+  bool _isMuted = true; // ✅ Start muted (Host: tap to toggle, User: hold to talk)
   String _username = ''; // ✅ Store username dynamically
 
   // ✅ Username mapping: uid -> username
@@ -57,8 +57,10 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   // ✅ NEW: Host UID for selective audio subscription
   int? _hostUid;
 
-  final bool _logVolumes = true;
+  final bool _logVolumes = false; // ✅ OPTIMIZATION: Disabled to reduce console spam
   static const int TOKEN_VALID_DURATION = 3300; // Token valid for 1 hour (3600s), refresh at 55 min
+  static const int SESSION_POLL_INTERVAL = 5; // ✅ OPTIMIZATION: Increased from 3s to 5s
+  static const int USERNAME_FETCH_INTERVAL = 10; // ✅ OPTIMIZATION: Increased from 5s to 10s
 
   @override
   void initState() {
@@ -109,8 +111,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     // Initial check
     _checkSessionStatus();
 
-    // Poll every 3 seconds until connected
-    _sessionStatusTimer = Timer.periodic(const Duration(seconds: 3), (timer) {
+    // ✅ OPTIMIZATION: Poll every 5 seconds (less aggressive)
+    _sessionStatusTimer = Timer.periodic(Duration(seconds: SESSION_POLL_INTERVAL), (timer) {
       if (!mounted || _isConnected) {
         // Stop polling if widget disposed or user connected
         timer.cancel();
@@ -140,6 +142,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        final wasActive = _isSessionActive;
         final isActive = data['isActive'] ?? false;
 
         if (mounted) {
@@ -152,6 +155,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               _statusMessage = 'Session active - Ready to join';
             }
           });
+
+          // ✅ OPTIMIZATION: Auto-join when session becomes active (state change)
+          if (!wasActive && isActive && !_isConnected && !_isJoining) {
+            print('✅ Session activated - auto-joining now...');
+            _joinChannel();
+          }
         }
 
         print('📡 Session status: ${isActive ? "✅ Active" : "⏸️ Not started"}');
@@ -209,24 +218,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   }
 
   /// ✅ Wait for session to become active, then auto-join
+  /// OPTIMIZATION: Rely on session polling instead of separate timer
   void _waitForSessionAndAutoJoin() {
-    Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-
-      if (_isConnected || _isJoining) {
-        timer.cancel();
-        return;
-      }
-
-      if (_isSessionActive) {
-        print('✅ Session is now active, auto-joining...');
-        timer.cancel();
-        _joinChannel();
-      }
-    });
+    // Session polling will trigger auto-join when _isSessionActive becomes true
+    // No need for a separate timer - reduces overhead
+    print('⏸️ Waiting for session to become active (via existing polling)...');
   }
 
   Future<void> _requestMicrophonePermission() async {
@@ -351,21 +347,70 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   /// - Regular users: Only hear the admin/host
   /// - Admin/host users: Hear everyone
   Future<void> _applySelectiveAudioSubscription(int remoteUid) async {
+    print('🔧 Applying audio subscription for UID: $remoteUid, isHost: $_isHost, hostUid: $_hostUid');
+
     if (_isHost) {
       // Host can hear everyone - subscribe to all audio streams (default behavior)
       print('👑 Host: Subscribing to all audio streams (UID: $remoteUid)');
-      await _agoraEngine.muteRemoteAudioStream(remoteUid, false);
+      await _agoraEngine.muteRemoteAudioStream(uid: remoteUid, mute: false);
     } else {
       // Regular user: Only subscribe to host's audio stream
-      if (_hostUid != null && remoteUid == _hostUid) {
-        // This is the host - unmute them
-        print('🔊 Client: Unmuting HOST audio stream (UID: $remoteUid)');
-        await _agoraEngine.muteRemoteAudioStream(remoteUid, false);
-      } else {
-        // This is another client - mute them
-        print('🔇 Client: Muting other CLIENT audio stream (UID: $remoteUid)');
-        await _agoraEngine.muteRemoteAudioStream(remoteUid, true);
+      if (_hostUid == null) {
+        // ✅ CRITICAL FIX: If we don't know host UID yet, fetch it from backend immediately
+        print('⏳ Client: Don\'t know host UID yet. Fetching from backend...');
+        await _fetchHostUidAndApply(remoteUid);
+        return;
       }
+
+      if (remoteUid == _hostUid) {
+        // This is the host - UNMUTE them (override default)
+        print('🔊 Client: UNMUTING HOST audio stream (UID: $remoteUid)');
+        await _agoraEngine.muteRemoteAudioStream(uid: remoteUid, mute: false);
+      } else {
+        // This is another client - keep muted (already muted by default)
+        print('🔇 Client: Keeping other CLIENT muted (UID: $remoteUid)');
+        await _agoraEngine.muteRemoteAudioStream(uid: remoteUid, mute: true);
+      }
+    }
+  }
+
+  /// ✅ NEW: Fetch host UID from backend and apply selective audio immediately
+  /// This prevents the race condition where admin joins before we know their UID
+  Future<void> _fetchHostUidAndApply(int remoteUid) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_backendUrl/session/$_channelName/users'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final hostUid = data['hostUid'];
+
+        if (hostUid != null) {
+          final hostUidInt = hostUid is int
+              ? hostUid as int
+              : int.parse(hostUid.toString());
+
+          setState(() {
+            _hostUid = hostUidInt;
+          });
+
+          print('👑 Host UID fetched immediately: $_hostUid');
+
+          // Now apply the audio subscription with the known host UID
+          if (remoteUid == _hostUid) {
+            print('🔊 Client: UNMUTING HOST audio stream (UID: $remoteUid)');
+            await _agoraEngine.muteRemoteAudioStream(uid: remoteUid, mute: false);
+          } else {
+            print('🔇 Client: Keeping other CLIENT muted (UID: $remoteUid)');
+            await _agoraEngine.muteRemoteAudioStream(uid: remoteUid, mute: true);
+          }
+        } else {
+          print('⏳ No host UID found yet, keeping UID $remoteUid muted');
+        }
+      }
+    } catch (e) {
+      print('Error fetching host UID: $e');
     }
   }
 
@@ -396,6 +441,16 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         throw Exception('Token is null');
       }
 
+      // ✅ FIX: For users (non-host), set default to mute all remote streams
+      // Then we'll selectively unmute the admin when we learn their UID
+      if (!_isHost) {
+        print('🔇 User: Setting default to mute all remote streams (will unmute admin later)');
+        await _agoraEngine.setDefaultMuteAllRemoteAudioStreams(true);
+      } else {
+        print('👑 Admin: Subscribing to all remote streams by default');
+        await _agoraEngine.setDefaultMuteAllRemoteAudioStreams(false);
+      }
+
       await _agoraEngine.joinChannel(
         token: _agoraToken!,
         channelId: _channelName,
@@ -410,12 +465,13 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       final elapsed = DateTime.now().difference(startTime).inMilliseconds;
       print('✅ Channel join completed in ${elapsed}ms');
 
-      // ✅ Auto-unmute when joined to start conversation
+      // ✅ Start muted for both host and users
+      // Host: Can toggle with tap, User: Hold to speak
       await _agoraEngine.muteLocalAudioStream(true); // Start muted
 
       setState(() {
         _isJoining = false;
-        _isMuted = true; // Start muted, user holds button to talk
+        _isMuted = true; // Start muted
       });
     } catch (e) {
       print('❌ Error joining channel: $e');
@@ -514,16 +570,23 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         setState(() {
           _usernames[uid] = _username;
           if (hostUid != null) {
-            _hostUid = hostUid;
+            // ✅ FIX: Ensure hostUid is converted to int
+            _hostUid = hostUid is int
+                ? hostUid as int
+                : int.parse(hostUid.toString());
             print('👑 Host UID identified: $_hostUid');
           }
         });
 
         // ✅ Apply selective audio subscription for existing users
-        if (!_isHost) {
+        if (!_isHost && _hostUid != null) {
+          print('🔄 Re-applying audio filters now that we know host UID: $_hostUid');
+          print('📋 Remote users in channel: $_remoteUsers');
           for (final remoteUid in _remoteUsers) {
+            print('   → Processing UID: $remoteUid (isHost: ${remoteUid == _hostUid})');
             await _applySelectiveAudioSubscription(remoteUid);
           }
+          print('✅ Finished re-applying audio filters');
         }
       } else {
         print('⚠️ Failed to register user in session: ${response.body}');
@@ -538,7 +601,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   void _startFetchingUsernames() {
     _fetchUsernames(); // Initial fetch
 
-    _usernamesFetchTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+    // ✅ OPTIMIZATION: Fetch every 10 seconds (reduced frequency)
+    _usernamesFetchTimer = Timer.periodic(Duration(seconds: USERNAME_FETCH_INTERVAL), (timer) {
       if (!mounted || !_isConnected) {
         timer.cancel();
         return;
@@ -562,21 +626,31 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         if (mounted) {
           setState(() {
             for (var user in users) {
-              final userId = user['userId'];
-              final username = user['username'];
+              // ✅ FIX: Explicitly convert userId to int to match Agora UID type
+              final userId = user['userId'] is int
+                  ? user['userId'] as int
+                  : int.parse(user['userId'].toString());
+              final username = user['username'] as String;
               _usernames[userId] = username;
+              print('📝 Mapped username: UID $userId → $username');
             }
 
             // ✅ Update host UID if available
             if (hostUid != null && _hostUid == null) {
-              _hostUid = hostUid;
+              _hostUid = hostUid is int
+                  ? hostUid as int
+                  : int.parse(hostUid.toString());
               print('👑 Host UID identified from user list: $_hostUid');
 
               // ✅ Re-apply selective audio subscription if we just learned the host UID
               if (!_isHost) {
+                print('🔄 Re-applying audio filters (from fetchUsernames) for host UID: $_hostUid');
+                print('📋 Remote users: $_remoteUsers');
                 for (final remoteUid in _remoteUsers) {
-                  _applySelectiveAudioSubscription(remoteUid);
+                  print('   → Processing UID: $remoteUid (isHost: ${remoteUid == _hostUid})');
+                  await _applySelectiveAudioSubscription(remoteUid);
                 }
+                print('✅ Finished re-applying filters (from fetchUsernames)');
               }
             }
           });
@@ -587,7 +661,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  /// ✅ Unmute (hold to talk)
+  /// ✅ Unmute (hold to talk or toggle for host)
   Future<void> _unmute() async {
     if (!_isConnected) return;
 
@@ -602,7 +676,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     }
   }
 
-  /// ✅ Mute (release button)
+  /// ✅ Mute (release button or toggle for host)
   Future<void> _mute() async {
     if (!_isConnected) return;
 
@@ -614,6 +688,17 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       print('🔇 Muted - Listening');
     } catch (e) {
       print('Error muting: $e');
+    }
+  }
+
+  /// ✅ NEW: Toggle mute state (for admin/host only)
+  Future<void> _toggleMute() async {
+    if (!_isConnected) return;
+
+    if (_isMuted) {
+      await _unmute();
+    } else {
+      await _mute();
     }
   }
 
@@ -807,16 +892,22 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // ✅ Microphone button (Hold to Talk - auto-joined, no tap to join)
+                  // ✅ Microphone button
+                  // Host/Admin: Tap to toggle mute/unmute
+                  // Regular User: Hold to talk (push-to-talk)
                   GestureDetector(
-                    // Hold to talk (push-to-talk)
-                    onTapDown: _isConnected ? (details) async {
+                    // Host: Tap to toggle
+                    onTap: _isHost && _isConnected ? () async {
+                      await _toggleMute();
+                    } : null,
+                    // Regular User: Hold to talk
+                    onTapDown: !_isHost && _isConnected ? (details) async {
                       await _unmute(); // Unmute when pressing down
                     } : null,
-                    onTapUp: _isConnected ? (details) async {
+                    onTapUp: !_isHost && _isConnected ? (details) async {
                       await _mute(); // Mute when releasing
                     } : null,
-                    onTapCancel: _isConnected ? () async {
+                    onTapCancel: !_isHost && _isConnected ? () async {
                       await _mute(); // Mute if gesture is cancelled
                     } : null,
                     child: Container(
@@ -883,12 +974,16 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                   ),
                   const SizedBox(height: 32),
 
-                  // ✅ Status text (auto-joining, no manual join needed)
+                  // ✅ Status text (different for host vs user)
                   Text(
                     _isJoining
                         ? 'CONNECTING...'
                         : _isConnected
-                            ? (_isMuted ? 'HOLD TO TALK' : 'SPEAKING - RELEASE TO MUTE')
+                            ? _isHost
+                                // Host: Toggle mode
+                                ? (_isMuted ? 'TAP TO UNMUTE' : 'TAP TO MUTE')
+                                // User: Hold-to-talk mode
+                                : (_isMuted ? 'HOLD TO TALK' : 'SPEAKING - RELEASE TO MUTE')
                             : (!_isHost && !_isSessionActive)
                                 ? 'WAITING FOR HOST...'
                                 : 'JOINING...',

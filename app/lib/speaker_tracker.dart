@@ -24,6 +24,7 @@ class SpeakerTracker {
   // Configuration constants
   static const int volumeThreshold = 50; // Volume > 50 = speaking
   static const int debounceMs = 300; // Ignore rapid fluctuations
+  static const int silenceCheckIntervalMs = 300; // ✅ OPTIMIZATION: Reduced from 100ms to 300ms
 
   final Map<int, UserSpeakingState> _userStates = {};
 
@@ -53,10 +54,11 @@ class SpeakerTracker {
   /// Start background silence checks.
   ///
   /// Call this after joining a channel (optional but recommended).
+  /// ✅ OPTIMIZATION: Reduced frequency from 100ms to 300ms to save CPU
   void start() {
     _silenceTimer?.cancel();
     _silenceTimer = Timer.periodic(
-      const Duration(milliseconds: 100),
+      Duration(milliseconds: silenceCheckIntervalMs),
       (_) => tick(),
     );
   }
@@ -139,40 +141,44 @@ class SpeakerTracker {
     bool viaTimeout = false,
   }) {
     final userState = _userStates[uid]!;
+    bool stateChanged = false; // ✅ OPTIMIZATION: Only notify if state actually changed
 
     if (toSpeaking) {
       // Silent → Speaking
       if (!userState.isSpeaking) {
         userState.isSpeaking = true;
         userState.lastStartTime = at;
+        stateChanged = true;
         print('🎤 User $uid started speaking at $at');
-        speakingStatesNotifier.value = Map.from(_userStates);
       }
-      return;
+    } else {
+      // Speaking → Silent
+      if (userState.isSpeaking) {
+        userState.isSpeaking = false;
+        userState.lastEndTime = at;
+        stateChanged = true;
+
+        if (userState.lastStartTime != null) {
+          final event = SpeakingEvent(
+            userId: uid,
+            sessionId: sessionId,
+            startTime: userState.lastStartTime!,
+            endTime: at,
+          );
+
+          print(viaTimeout
+              ? '🛑 User $uid stopped speaking (timeout) at $at'
+              : '🛑 User $uid stopped speaking at $at');
+          print('📊 Event: $event');
+
+          onSpeakingEventComplete?.call(event);
+          _sendEventToBackend(event);
+        }
+      }
     }
 
-    // Speaking → Silent
-    if (userState.isSpeaking) {
-      userState.isSpeaking = false;
-      userState.lastEndTime = at;
-
-      if (userState.lastStartTime != null) {
-        final event = SpeakingEvent(
-          userId: uid,
-          sessionId: sessionId,
-          startTime: userState.lastStartTime!,
-          endTime: at,
-        );
-
-        print(viaTimeout
-            ? '🛑 User $uid stopped speaking (timeout) at $at'
-            : '🛑 User $uid stopped speaking at $at');
-        print('📊 Event: $event');
-
-        onSpeakingEventComplete?.call(event);
-        _sendEventToBackend(event);
-      }
-
+    // ✅ OPTIMIZATION: Only trigger rebuild if state actually changed
+    if (stateChanged) {
       speakingStatesNotifier.value = Map.from(_userStates);
     }
   }
