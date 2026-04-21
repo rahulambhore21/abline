@@ -1511,7 +1511,7 @@ app.get('/session/:id/users', (req, res) => {
  * 
  * Protected: Requires host role
  */
-app.post('/session/:id/start', authMiddleware, allowRole('host'), (req, res) => {
+app.post('/session/:id/start', authMiddleware, allowRole('host'), async (req, res) => {
   try {
     const { id: sessionId } = req.params;
 
@@ -1528,6 +1528,9 @@ app.post('/session/:id/start', authMiddleware, allowRole('host'), (req, res) => 
         users: new Map(),
         startedAt: new Date(),
         isActive: true,
+        recordingResourceId: null,
+        recordingSid: null,
+        recordingActive: false,
       });
     } else {
       const session = activeSessions.get(sessionId);
@@ -1537,11 +1540,32 @@ app.post('/session/:id/start', authMiddleware, allowRole('host'), (req, res) => 
 
     console.log(`✅ Session ${sessionId} started by host ${req.user.username}`);
 
+    // ✅ NEW: Automatically start Agora Cloud Recording
+    try {
+      const session = activeSessions.get(sessionId);
+      console.log(`🎬 Starting automatic Cloud Recording for session ${sessionId}...`);
+
+      // Step 1: Acquire resource ID
+      const resourceId = await acquireRecording(sessionId);
+      session.recordingResourceId = resourceId;
+
+      // Step 2: Start recording
+      const recordingData = await startRecording(sessionId, resourceId);
+      session.recordingSid = recordingData.sid;
+      session.recordingActive = true;
+
+      console.log(`✅ Automatic Cloud Recording started! SID: ${recordingData.sid}`);
+    } catch (recordingError) {
+      console.error('⚠️ Failed to start automatic recording (continuing without it):', recordingError.message);
+      // Don't fail the session start if recording fails - just log it
+    }
+
     res.status(200).json({
       success: true,
       sessionId,
-      message: 'Session started successfully',
+      message: 'Session started successfully (automatic recording enabled)',
       startedAt: activeSessions.get(sessionId).startedAt,
+      recordingActive: activeSessions.get(sessionId).recordingActive,
     });
   } catch (error) {
     console.error('Error starting session:', error);
@@ -1558,7 +1582,7 @@ app.post('/session/:id/start', authMiddleware, allowRole('host'), (req, res) => 
  * 
  * Protected: Requires host role
  */
-app.post('/session/:id/stop', authMiddleware, allowRole('host'), (req, res) => {
+app.post('/session/:id/stop', authMiddleware, allowRole('host'), async (req, res) => {
   try {
     const { id: sessionId } = req.params;
 
@@ -1574,6 +1598,19 @@ app.post('/session/:id/stop', authMiddleware, allowRole('host'), (req, res) => {
     session.stoppedAt = new Date();
 
     console.log(`⏹️ Session ${sessionId} stopped by host ${req.user.username}`);
+
+    // ✅ NEW: Automatically stop Agora Cloud Recording
+    if (session.recordingActive && session.recordingSid) {
+      try {
+        console.log(`🎬 Stopping automatic Cloud Recording for session ${sessionId}...`);
+        await stopRecording(sessionId, session.recordingResourceId);
+        session.recordingActive = false;
+        console.log(`✅ Cloud Recording stopped!`);
+      } catch (recordingError) {
+        console.error('⚠️ Error stopping recording (continuing anyway):', recordingError.message);
+        // Don't fail session stop even if recording stop fails
+      }
+    }
 
     res.status(200).json({
       success: true,

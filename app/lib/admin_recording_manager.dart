@@ -23,10 +23,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   bool _isLoading = true;
   String _error = '';
 
-  final _channelNameController = TextEditingController();
-  final _uidController = TextEditingController();
-  bool _isStarting = false;
-
   @override
   void initState() {
     super.initState();
@@ -36,8 +32,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
 
   @override
   void dispose() {
-    _channelNameController.dispose();
-    _uidController.dispose();
     super.dispose();
   }
 
@@ -111,143 +105,11 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
     }
   }
 
-  Future<void> _startRecording() async {
-    if (_channelNameController.text.isEmpty || _uidController.text.isEmpty) {
-      _showSnackBar('Please fill in all fields', isError: true);
-      return;
-    }
-
-    setState(() => _isStarting = true);
-
-    try {
-      final response = await _authService.authenticatedPost(
-        '${AppConfig.backendBaseUrl}/recording/start',
-        body: {
-          'channelName': _channelNameController.text,
-          'uid': int.parse(_uidController.text),
-        },
-      );
-
-      if (response.statusCode == 201) {
-        _showSnackBar('Recording started successfully!');
-        _channelNameController.clear();
-        _uidController.clear();
-        if (mounted) Navigator.pop(context);
-        await _loadRecordingData();
-      } else {
-        final error = jsonDecode(response.body);
-        _showSnackBar(error['error'] ?? 'Failed to start recording', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('Error: $e', isError: true);
-    } finally {
-      if (mounted) {
-        setState(() => _isStarting = false);
-      }
-    }
-  }
-
-  Future<void> _stopRecording(String channelName) async {
-    try {
-      final response = await _authService.authenticatedPost(
-        '${AppConfig.backendBaseUrl}/recording/stop',
-        body: {
-          'channelName': channelName,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        _showSnackBar('Recording stopped successfully!');
-        await _loadRecordingData();
-      } else {
-        final error = jsonDecode(response.body);
-        _showSnackBar(error['error'] ?? 'Failed to stop recording', isError: true);
-      }
-    } catch (e) {
-      _showSnackBar('Error: $e', isError: true);
-    }
-  }
-
   void _showSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: isError ? Colors.red : Colors.green,
-      ),
-    );
-  }
-
-  void _showStartRecordingDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Start Recording'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _channelNameController,
-                decoration: InputDecoration(
-                  labelText: 'Channel Name',
-                  hintText: 'e.g., demo-channel',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.videocam),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _uidController,
-                decoration: InputDecoration(
-                  labelText: 'Recorder UID',
-                  hintText: 'e.g., 0',
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.numbers),
-                ),
-                keyboardType: TextInputType.number,
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  border: Border.all(color: Colors.blue.shade300),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  'Note: Make sure participants are in the channel before starting the recording.',
-                  style: TextStyle(
-                    color: Colors.blue.shade900,
-                    fontSize: 12,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _channelNameController.clear();
-              _uidController.clear();
-            },
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: _isStarting ? null : _startRecording,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue,
-            ),
-            child: _isStarting
-                ? SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Text('Start Recording'),
-          ),
-        ],
       ),
     );
   }
@@ -293,19 +155,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                   spacing: 10,
                   runSpacing: 10,
                   children: [
-                    ElevatedButton.icon(
-                      onPressed: _showStartRecordingDialog,
-                      icon: const Icon(Icons.play_circle),
-                      label: const Text('Start Recording'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 14,
-                        ),
-                      ),
-                    ),
+                    // ✅ REMOVED: Manual "Start Recording" button (now automatic)
+                    // Recording starts automatically when host joins
                     ElevatedButton.icon(
                       onPressed: _loadRecordingData,
                       icon: const Icon(Icons.refresh),
@@ -350,6 +201,50 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
 
           if (_error.isEmpty) ...[
             const SizedBox(height: 20),
+
+            // ✅ NEW: Automatic Recording Status
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00FF41).withOpacity(0.15),
+                border: Border.all(color: const Color(0xFF00FF41), width: 2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.check_circle,
+                    color: Color(0xFF00FF41),
+                    size: 24,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: const [
+                        Text(
+                          '✅ Automatic Recording Active',
+                          style: TextStyle(
+                            color: Color(0xFF00FF41),
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        SizedBox(height: 4),
+                        Text(
+                          'Recording starts automatically when you begin a session and stops when the session ends',
+                          style: TextStyle(
+                            color: Color(0xFF00FF41),
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
 
             const Text(
               'Active Recordings',
@@ -424,21 +319,16 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                   fontSize: 12,
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                '✅ Auto-stopping when session ends',
+                                style: TextStyle(
+                                  color: Color(0xFF00FF41),
+                                  fontSize: 11,
+                                ),
+                              ),
                             ],
                           ),
-                        ),
-                        ElevatedButton(
-                          onPressed: () =>
-                              _stopRecording(recording['channelName'] ?? ''),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.red,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          child: const Text('Stop'),
                         ),
                       ],
                     ),
