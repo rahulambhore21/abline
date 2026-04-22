@@ -82,20 +82,9 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     return '$minutes:$seconds';
   }
 
-  /// Get date string from DateTime
+  /// Get date string from DateTime (exact date format: DD MMM YYYY)
   String _getDateString(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = DateTime(now.year, now.month, now.day - 1);
-    final date = DateTime(dateTime.year, dateTime.month, dateTime.day);
-
-    if (date == today) {
-      return 'Today';
-    } else if (date == yesterday) {
-      return 'Yesterday';
-    } else {
-      return '${date.day} ${_getMonthName(date.month)} ${date.year}';
-    }
+    return '${dateTime.day} ${_getMonthName(dateTime.month)} ${dateTime.year}';
   }
 
   /// Get month name
@@ -117,9 +106,16 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     return months[month - 1];
   }
 
-  /// Format time as HH:mm
+  /// Format time as HH:MM AM/PM (Indian time standard)
   String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+    final hour = dateTime.hour;
+    final minute = dateTime.minute;
+
+    // Convert to 12-hour format
+    final hour12 = hour % 12 == 0 ? 12 : hour % 12;
+    final ampm = hour >= 12 ? 'PM' : 'AM';
+
+    return '${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $ampm';
   }
 
   /// Group recordings by date
