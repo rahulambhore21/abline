@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'recording.dart';
-import 'user.dart';
 
 class RecordingListWidget extends StatefulWidget {
   final List<Recording> recordings;
@@ -20,9 +19,6 @@ class RecordingListWidget extends StatefulWidget {
 class _RecordingListWidgetState extends State<RecordingListWidget> {
   late AudioPlayer _audioPlayer;
   String? _currentPlayingRecordingId;
-  Duration _currentPosition = Duration.zero;
-  Duration _totalDuration = Duration.zero;
-  bool _isPlaying = false;
 
   @override
   void initState() {
@@ -33,50 +29,31 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
 
   /// Setup listeners for audio player state changes
   void _setupAudioPlayerListeners() {
-    _audioPlayer.positionStream.listen((duration) {
-      setState(() {
-        _currentPosition = duration;
-      });
-    });
-
-    _audioPlayer.durationStream.listen((duration) {
-      setState(() {
-        _totalDuration = duration ?? Duration.zero;
-      });
-    });
-
     _audioPlayer.playerStateStream.listen((state) {
-      setState(() {
-        _isPlaying = state.playing;
-      });
-
       // If player finished, reset
       if (state.processingState == ProcessingState.completed) {
-        _stopPlayback();
+        setState(() {
+          _currentPlayingRecordingId = null;
+        });
       }
     });
   }
 
-  /// Play a recording from URL
+  /// Play a recording from URL (auto-plays and auto-stops when done)
   Future<void> _playRecording(Recording recording) async {
     try {
       // Stop current playback if any
-      if (_currentPlayingRecordingId != null && _currentPlayingRecordingId != recording.id) {
+      if (_currentPlayingRecordingId != null) {
         await _audioPlayer.stop();
       }
 
       setState(() {
         _currentPlayingRecordingId = recording.id;
-        _currentPosition = Duration.zero;
       });
 
       // Load and play the audio
       await _audioPlayer.setUrl(recording.url);
       await _audioPlayer.play();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Playing: ${recording.filename}')),
-      );
     } catch (e) {
       print('Error playing recording: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -88,31 +65,82 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     }
   }
 
-  /// Pause playback
-  Future<void> _pausePlayback() async {
-    await _audioPlayer.pause();
-  }
-
-  /// Resume playback
-  Future<void> _resumePlayback() async {
-    await _audioPlayer.play();
-  }
-
   /// Stop playback
   Future<void> _stopPlayback() async {
     await _audioPlayer.stop();
     setState(() {
       _currentPlayingRecordingId = null;
-      _currentPosition = Duration.zero;
     });
   }
 
   /// Format duration as mm:ss
-  String _formatDuration(Duration duration) {
+  String _formatDuration(int durationMs) {
+    final duration = Duration(milliseconds: durationMs);
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return '$minutes:$seconds';
+  }
+
+  /// Get date string from DateTime
+  String _getDateString(DateTime dateTime) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final yesterday = DateTime(now.year, now.month, now.day - 1);
+    final date = DateTime(dateTime.year, dateTime.month, dateTime.day);
+
+    if (date == today) {
+      return 'Today';
+    } else if (date == yesterday) {
+      return 'Yesterday';
+    } else {
+      return '${date.day} ${_getMonthName(date.month)} ${date.year}';
+    }
+  }
+
+  /// Get month name
+  String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return months[month - 1];
+  }
+
+  /// Format time as HH:mm
+  String _formatTime(DateTime dateTime) {
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
+  }
+
+  /// Group recordings by date
+  Map<String, List<Recording>> _groupRecordingsByDate() {
+    final grouped = <String, List<Recording>>{};
+
+    for (final recording in widget.recordings) {
+      try {
+        final dateTime = DateTime.parse(recording.recordedAt);
+        final dateString = _getDateString(dateTime);
+
+        if (!grouped.containsKey(dateString)) {
+          grouped[dateString] = [];
+        }
+        grouped[dateString]!.add(recording);
+      } catch (e) {
+        print('Error parsing date: ${recording.recordedAt}');
+      }
+    }
+
+    return grouped;
   }
 
   @override
@@ -124,205 +152,118 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
       );
     }
 
+    final groupedRecordings = _groupRecordingsByDate();
+
     return Column(
-      children: [
-        // Current playback display
-        if (_currentPlayingRecordingId != null)
-          Container(
-            padding: const EdgeInsets.all(12),
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.blue.shade50,
-              border: Border.all(color: Colors.blue.shade200),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Now Playing',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 12,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                // Progress bar
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: _totalDuration.inMilliseconds > 0
-                            ? _currentPosition.inMilliseconds / _totalDuration.inMilliseconds
-                            : 0,
-                        minHeight: 6,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          _formatDuration(_currentPosition),
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                        Text(
-                          _formatDuration(_totalDuration),
-                          style: const TextStyle(fontSize: 11),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                // Playback controls
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    ElevatedButton.icon(
-                      onPressed: _isPlaying ? _pausePlayback : _resumePlayback,
-                      icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
-                      label: Text(_isPlaying ? 'Pause' : 'Resume'),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton.icon(
-                      onPressed: _stopPlayback,
-                      icon: const Icon(Icons.stop),
-                      label: const Text('Stop'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
+      children: groupedRecordings.entries.map((entry) {
+        final dateString = entry.key;
+        final recordingsForDate = entry.value;
 
-        // Recordings list
-        ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: widget.recordings.length,
-          itemBuilder: (context, index) {
-            final recording = widget.recordings[index];
-            final isCurrentlyPlaying = _currentPlayingRecordingId == recording.id;
-
-            return Container(
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: isCurrentlyPlaying ? Colors.blue : Colors.grey.shade300,
-                  width: isCurrentlyPlaying ? 2 : 1,
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Date header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+              child: Text(
+                dateString,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white70,
                 ),
-                borderRadius: BorderRadius.circular(8),
-                color: isCurrentlyPlaying ? Colors.blue.shade50 : Colors.white,
               ),
-              child: Row(
-                children: [
-                  // Play button
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade400,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      child: InkWell(
-                        onTap: isCurrentlyPlaying
-                            ? null
-                            : () => _playRecording(recording),
-                        customBorder: const CircleBorder(),
-                        child: Center(
-                          child: Icon(
-                            isCurrentlyPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
+            ),
+            // Recordings for this date
+            ...recordingsForDate.map((recording) {
+              final dateTime = DateTime.parse(recording.recordedAt);
+              final timeString = _formatTime(dateTime);
+              final durationString = _formatDuration(recording.durationMs ?? 0);
+              final isCurrentlyPlaying = _currentPlayingRecordingId == recording.id;
 
-                  // Recording info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'User: ${recording.userId}',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                          ),
-                        ),
-                        Text(
-                          recording.filename,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Recorded: ${_formatRecordingTime(recording.recordedAt)}',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.grey.shade500,
-                          ),
-                        ),
-                      ],
+              return GestureDetector(
+                onTap: isCurrentlyPlaying
+                    ? _stopPlayback
+                    : () => _playRecording(recording),
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: isCurrentlyPlaying
+                        ? Colors.blue.shade700
+                        : Colors.white.withOpacity(0.05),
+                    border: Border.all(
+                      color: isCurrentlyPlaying
+                          ? Colors.blue.shade500
+                          : Colors.white.withOpacity(0.1),
                     ),
+                    borderRadius: BorderRadius.circular(8),
                   ),
-
-                  // Status badge
-                  if (isCurrentlyPlaying)
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: Colors.blue,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: const Text(
-                        'Playing',
-                        style: TextStyle(
+                  child: Row(
+                    children: [
+                      // Play/Stop icon
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isCurrentlyPlaying
+                              ? Colors.blue.shade600
+                              : Colors.blue.shade400,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(
+                          isCurrentlyPlaying ? Icons.stop : Icons.play_arrow,
                           color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold,
+                          size: 20,
                         ),
                       ),
-                    ),
-                ],
-              ),
-            );
-          },
-        ),
-      ],
+                      const SizedBox(width: 12),
+
+                      // Time and duration
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              timeString,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Duration: $durationString',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.6),
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Playing indicator
+                      if (isCurrentlyPlaying)
+                        Container(
+                          width: 4,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade300,
+                            borderRadius: BorderRadius.circular(2),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+            const SizedBox(height: 8),
+          ],
+        );
+      }).toList(),
     );
-  }
-
-  /// Format recording timestamp for display
-  String _formatRecordingTime(String isoString) {
-    try {
-      final dateTime = DateTime.parse(isoString);
-      final now = DateTime.now();
-      final difference = now.difference(dateTime);
-
-      if (difference.inMinutes < 1) {
-        return 'just now';
-      } else if (difference.inHours < 1) {
-        return '${difference.inMinutes}m ago';
-      } else if (difference.inDays < 1) {
-        return '${difference.inHours}h ago';
-      } else {
-        return dateTime.toString().substring(0, 16);
-      }
-    } catch (e) {
-      return 'unknown';
-    }
   }
 
   @override
