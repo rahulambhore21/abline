@@ -45,40 +45,9 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         _error = '';
       });
 
-      // ✅ NEW: If userId was passed as parameter, use it directly
-      if (widget.userId != null && widget.userId! > 0) {
-        _userId = widget.userId!;
-        print('✅ Using provided Agora UID: $_userId');
-      } else {
-        // Fallback: Get user ID from AuthService (for home screen)
-        final userIdStr = await _authService.getUserId();
-        print('📋 Retrieved userId from AuthService: $userIdStr');
-
-        if (userIdStr == null || userIdStr.isEmpty) {
-          setState(() {
-            _error = 'User ID not found - Please login again';
-            _isLoading = false;
-          });
-          return;
-        }
-
-        // Parse userId - handle both string formats
-        _userId = int.tryParse(userIdStr) ?? 0;
-
-        // If parsing failed, try to extract from MongoDB ObjectId string
-        if (_userId == 0) {
-          // Try parsing as-is (MongoDB ObjectId strings are hex)
-          // For now, just use the string as-is for the API call
-          print('⚠️ Could not parse userId as int: $userIdStr, using string as-is');
-          _userId = 0;
-        }
-
-        print('✅ Parsed userId: $_userId');
-      }
-
-      // Construct the URL - use userIdStr if _userId is 0
-      final userIdForUrl = _userId > 0 ? _userId.toString() : 'unknown';
-      final url = '$_backendUrl/recordings/user/$userIdForUrl?sessionId=${widget.sessionId}';
+      // ✅ FIXED: Use session-based endpoint instead of user-based
+      // This works because recordings are tied to sessions, not MongoDB user IDs
+      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}';
       print('🌐 Fetching recordings from: $url');
 
       // Fetch recordings
