@@ -305,6 +305,10 @@ function loadRecordingsFromDisk() {
       const data = JSON.parse(fs.readFileSync(RECORDINGS_METADATA_FILE, 'utf8'));
       console.log(`📂 Loaded ${data.length} recordings from disk`);
       for (const recording of data) {
+        // ✅ FIXED: Ensure URLs are absolute when loading from disk
+        if (recording.url && !recording.url.startsWith('http')) {
+          recording.url = `http://localhost:${PORT}/recordings/download/${recording.id}`;
+        }
         recordingsStorage.set(recording.id, recording);
       }
     }
@@ -1747,7 +1751,7 @@ app.get('/recordings', (req, res) => {
         userId: r.userId,
         sessionId: r.sessionId,
         filename: r.filename,
-        url: r.url,
+        url: `http://localhost:${PORT}/recordings/download/${r.id}`, // ✅ FIXED: Use absolute URL
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
       })),
@@ -1839,7 +1843,7 @@ app.post('/recordings/save', async (req, res) => {
       userId: Number(userId),
       sessionId,
       filename,
-      url: `/recordings/download/${recordingId}`, // URL to download the file
+      url: `http://localhost:${PORT}/recordings/download/${recordingId}`, // ✅ FIXED: Use absolute URL
       recordedAt: new Date().toISOString(),
       durationMs: Number(durationMs) || 0,
     };
