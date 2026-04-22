@@ -148,6 +148,30 @@ const UserModel = mongoose.model('User', UserSchema);
 
 /**
  * ============================================================================
+ * Recording Model for MongoDB Persistence
+ * ============================================================================
+ * Stores recording metadata so recordings survive server restarts
+ */
+const RecordingSchema = new mongoose.Schema(
+  {
+    recordingId: { type: String, required: true, unique: true, index: true },
+    userId: { type: Number, required: true, index: true },
+    sessionId: { type: String, required: true, index: true },
+    filename: { type: String, required: true },
+    recordedAt: { type: Date, default: Date.now, index: true },
+    durationMs: { type: Number, default: 0 },
+    url: { type: String }, // Public URL for downloading
+  },
+  { timestamps: true }
+);
+
+// ✅ OPTIMIZATION: Compound index for efficient querying by session and user
+RecordingSchema.index({ sessionId: 1, userId: 1, recordedAt: -1 });
+
+const RecordingModel = mongoose.model('Recording', RecordingSchema);
+
+/**
+ * ============================================================================
  * Authentication Middleware
  * ============================================================================
  *
@@ -296,6 +320,40 @@ setInterval(cleanupInactiveSessions, 60 * 60 * 1000);
 const recordingsStorage = new Map();
 const MAX_RECORDINGS = 500; // Limit to 500 recordings in memory
 const RECORDINGS_METADATA_FILE = path.join(__dirname, '.recordings-metadata.json');
+
+/**
+ * ✅ NEW: Load recordings from MongoDB on startup
+ */
+async function loadRecordingsFromDatabase() {
+  if (!mongoReady) {
+    console.warn('⚠️ MongoDB not ready - skipping database recording load');
+    return;
+  }
+
+  try {
+    const count = await RecordingModel.countDocuments();
+    if (count > 0) {
+      console.log(`📂 Found ${count} recordings in MongoDB`);
+
+      // Load into memory cache for fast access
+      const recordings = await RecordingModel.find().lean();
+      for (const rec of recordings) {
+        recordingsStorage.set(rec.recordingId, {
+          id: rec.recordingId,
+          userId: rec.userId,
+          sessionId: rec.sessionId,
+          filename: rec.filename,
+          url: rec.url || `${PUBLIC_URL}/recordings/download/${rec.recordingId}`,
+          recordedAt: rec.recordedAt,
+          durationMs: rec.durationMs,
+        });
+      }
+      console.log(`✅ Loaded ${recordings.length} recordings into memory cache`);
+    }
+  } catch (error) {
+    console.error('⚠️ Error loading recordings from MongoDB:', error.message);
+  }
+}
 
 /**
  * ✅ NEW: Load recordings metadata from disk on startup
@@ -1729,20 +1787,43 @@ app.get('/session/:id/status', (req, res) => {
  *   - sessionId (optional): Filter by session ID
  *   - userId (optional): Filter by user ID
  */
-app.get('/recordings', (req, res) => {
+app.get('/recordings', async (req, res) => {
   try {
     const { sessionId, userId } = req.query;
-    let recordings = Array.from(recordingsStorage.values());
 
+    if (mongoReady) {
+      // ✅ NEW: Query from MongoDB for persistent storage
+      const filter = {};
+      if (sessionId) filter.sessionId = sessionId;
+      if (userId) filter.userId = Number(userId);
+
+      const recordings = await RecordingModel.find(filter)
+        .sort({ recordedAt: -1 })
+        .lean();
+
+      return res.json({
+        total: recordings.length,
+        recordings: recordings.map((r) => ({
+          id: r.recordingId,
+          userId: r.userId,
+          sessionId: r.sessionId,
+          filename: r.filename,
+          url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+          recordedAt: r.recordedAt,
+          durationMs: r.durationMs,
+        })),
+      });
+    }
+
+    // Fallback: Use in-memory storage
+    let recordings = Array.from(recordingsStorage.values());
     if (sessionId) {
       recordings = recordings.filter((r) => r.sessionId === sessionId);
     }
-
     if (userId) {
       recordings = recordings.filter((r) => r.userId === userId);
     }
 
-    // Sort by recorded time, newest first
     recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
 
     res.json({
@@ -1752,7 +1833,7 @@ app.get('/recordings', (req, res) => {
         userId: r.userId,
         sessionId: r.sessionId,
         filename: r.filename,
-        url: `${PUBLIC_URL}/recordings/download/${r.id}`, // ✅ FIXED: Use PUBLIC_URL
+        url: r.url,
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
       })),
@@ -1838,22 +1919,38 @@ app.post('/recordings/save', async (req, res) => {
     const fileSize = fs.statSync(filePath).size;
     console.log(`✓ File verified - Size: ${fileSize} bytes`);
 
-    // Store recording metadata
+    // Store recording metadata in MongoDB
     const recording = {
-      id: recordingId,
+      recordingId,
       userId: Number(userId),
       sessionId,
       filename,
       url: `${PUBLIC_URL}/recordings/download/${recordingId}`, // ✅ FIXED: Use PUBLIC_URL
-      recordedAt: new Date().toISOString(),
+      recordedAt: new Date(),
       durationMs: Number(durationMs) || 0,
     };
 
+    try {
+      // ✅ NEW: Save to MongoDB for persistence across server restarts
+      if (mongoReady) {
+        await RecordingModel.create(recording);
+        console.log(`✅ Recording metadata saved to MongoDB`);
+      } else {
+        // Fallback: Store in memory if MongoDB is not ready
+        recordingsStorage.set(recordingId, recording);
+        saveRecordingsToDisk();
+        console.log(`⚠️  MongoDB not ready - storing in memory`);
+      }
+    } catch (dbError) {
+      console.error('⚠️  Error saving to MongoDB, falling back to memory:', dbError.message);
+      recordingsStorage.set(recordingId, recording);
+      saveRecordingsToDisk();
+    }
+
+    // Also keep in-memory cache for fast access
     recordingsStorage.set(recordingId, recording);
-    saveRecordingsToDisk(); // ✅ NEW: Persist to disk for server restarts
     cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
 
-    console.log(`✅ Recording metadata stored - Total recordings: ${recordingsStorage.size}`);
     console.log(`✅ Recording saved: User ${userId}, Session ${sessionId}, Duration ${durationMs}ms, ID: ${recordingId}`);
 
     res.status(201).json({
@@ -1877,49 +1974,49 @@ app.post('/recordings/save', async (req, res) => {
  * Get all recordings for a specific user in a session
  * Query params: ?sessionId=test_room
  *
- * ✅ FIXED: Now reads from disk to handle server restarts
+ * ✅ FIXED: Now reads from MongoDB to survive server restarts
  */
-app.get('/recordings/user/:userId', (req, res) => {
+app.get('/recordings/user/:userId', async (req, res) => {
   try {
     const userId = Number(req.params.userId);
     const { sessionId } = req.query;
 
     console.log(`📋 Fetching recordings for userId: ${userId}, sessionId: ${sessionId}`);
 
-    let recordings = Array.from(recordingsStorage.values());
+    let recordings = [];
 
-    // ✅ NEW: Also read from disk to find any recordings saved before server restart
-    const recordingsDir = path.join(__dirname, 'recordings');
-    if (fs.existsSync(recordingsDir)) {
-      const files = fs.readdirSync(recordingsDir);
-      console.log(`   Files on disk: ${files.length} files`);
-
-      for (const file of files) {
-        if (file.endsWith('.m4a')) {
-          // Try to parse metadata from memory first
-          const recordingId = file.replace('.m4a', '');
-          if (!recordingsStorage.has(recordingId)) {
-            // File exists but not in memory - create entry for it
-            console.log(`   ℹ️ Found orphaned recording on disk: ${recordingId}`);
-            // We'll include it if we can parse the ID
-            // For now, skip orphaned files
-          }
-        }
+    if (mongoReady) {
+      // ✅ NEW: Query from MongoDB for persistent storage
+      const filter = { userId };
+      if (sessionId) {
+        filter.sessionId = sessionId;
       }
+
+      const dbRecordings = await RecordingModel.find(filter)
+        .sort({ recordedAt: -1 })
+        .lean();
+
+      recordings = dbRecordings.map(r => ({
+        id: r.recordingId,
+        userId: r.userId,
+        sessionId: r.sessionId,
+        filename: r.filename,
+        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+        recordedAt: r.recordedAt,
+        durationMs: r.durationMs,
+      }));
+
+      console.log(`✅ Found ${recordings.length} recordings from MongoDB`);
+    } else {
+      // Fallback: Use in-memory storage if MongoDB is not ready
+      recordings = Array.from(recordingsStorage.values());
+      recordings = recordings.filter(r => r.userId === userId);
+      if (sessionId) {
+        recordings = recordings.filter(r => r.sessionId === sessionId);
+      }
+      recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+      console.log(`⚠️  Using in-memory storage - Found ${recordings.length} recordings`);
     }
-
-    // Filter by userId
-    recordings = recordings.filter(r => r.userId === userId);
-
-    // Optionally filter by sessionId
-    if (sessionId) {
-      recordings = recordings.filter(r => r.sessionId === sessionId);
-    }
-
-    // Sort by recordedAt (newest first)
-    recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
-
-    console.log(`✅ Found ${recordings.length} recordings for user ${userId}`);
 
     res.json({
       total: recordings.length,
@@ -1938,14 +2035,33 @@ app.get('/recordings/user/:userId', (req, res) => {
  * Get all recordings for a session, organized by user (admin view)
  * Requires: host role
  */
-app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), (req, res) => {
+app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), async (req, res) => {
   try {
     const sessionId = req.params.sessionId;
 
-    let recordings = Array.from(recordingsStorage.values());
+    let recordings = [];
 
-    // Filter by sessionId
-    recordings = recordings.filter(r => r.sessionId === sessionId);
+    if (mongoReady) {
+      // ✅ NEW: Query from MongoDB for persistent storage
+      const dbRecordings = await RecordingModel.find({ sessionId })
+        .sort({ recordedAt: -1 })
+        .lean();
+
+      recordings = dbRecordings.map(r => ({
+        id: r.recordingId,
+        userId: r.userId,
+        sessionId: r.sessionId,
+        filename: r.filename,
+        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+        recordedAt: r.recordedAt,
+        durationMs: r.durationMs,
+      }));
+    } else {
+      // Fallback: Use in-memory storage
+      recordings = Array.from(recordingsStorage.values());
+      recordings = recordings.filter(r => r.sessionId === sessionId);
+      recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+    }
 
     // Group by userId
     const byUser = {};
@@ -1954,11 +2070,6 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), (re
         byUser[r.userId] = [];
       }
       byUser[r.userId].push(r);
-    });
-
-    // Sort recordings within each user by recordedAt (newest first)
-    Object.keys(byUser).forEach(userId => {
-      byUser[userId].sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
     });
 
     console.log(`📋 Fetched ${recordings.length} recordings for session ${sessionId}`);
@@ -2023,7 +2134,7 @@ app.get('/recordings/download/:recordingId', (req, res) => {
  *     url: string (can be mock URL for testing)
  *   }
  */
-app.post('/recordings/add', (req, res) => {
+app.post('/recordings/add', async (req, res) => {
   try {
     const { userId, sessionId, filename, url } = req.body;
 
@@ -2035,18 +2146,29 @@ app.post('/recordings/add', (req, res) => {
 
     const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const recording = {
-      id: recordingId,
+      recordingId,
       userId,
       sessionId,
       filename,
       url,
-      recordedAt: new Date().toISOString(),
-      durationMs: 0, // Could be provided in request
+      recordedAt: new Date(),
+      durationMs: 0,
     };
 
+    try {
+      // ✅ NEW: Save to MongoDB
+      if (mongoReady) {
+        await RecordingModel.create(recording);
+        console.log(`✅ Recording saved to MongoDB`);
+      }
+    } catch (dbError) {
+      console.error('⚠️  Error saving to MongoDB, falling back to memory:', dbError.message);
+    }
+
+    // Keep in-memory cache
     recordingsStorage.set(recordingId, recording);
-    saveRecordingsToDisk(); // ✅ NEW: Persist to disk for server restarts
-    cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
+    saveRecordingsToDisk();
+    cleanupOldRecordings();
 
     res.status(201).json({
       success: true,
@@ -2226,7 +2348,10 @@ app.use((req, res) => {
 
 // Start server (connect to Mongo first, then listen)
 connectMongo().finally(() => {
-  // ✅ NEW: Load recordings from disk on startup
+  // ✅ NEW: Load recordings from MongoDB on startup
+  loadRecordingsFromDatabase();
+
+  // ✅ Load recordings metadata from disk on startup (fallback)
   loadRecordingsFromDisk();
 
   app.listen(PORT, () => {
