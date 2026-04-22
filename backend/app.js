@@ -26,6 +26,7 @@ const AGORA_CUSTOMER_SECRET = process.env.AGORA_CUSTOMER_SECRET;
 const MONGODB_URI = process.env.MONGODB_URI;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-production';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1d';
+const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`; // ✅ NEW: Public URL for deployed backend
 
 // Fail fast when MongoDB is not connected instead of buffering queries for ~10s.
 // This prevents confusing timeouts like: "Operation users.findOne() buffering timed out".
@@ -307,7 +308,7 @@ function loadRecordingsFromDisk() {
       for (const recording of data) {
         // ✅ FIXED: Ensure URLs are absolute when loading from disk
         if (recording.url && !recording.url.startsWith('http')) {
-          recording.url = `http://localhost:${PORT}/recordings/download/${recording.id}`;
+          recording.url = `${PUBLIC_URL}/recordings/download/${recording.id}`;
         }
         recordingsStorage.set(recording.id, recording);
       }
@@ -1751,7 +1752,7 @@ app.get('/recordings', (req, res) => {
         userId: r.userId,
         sessionId: r.sessionId,
         filename: r.filename,
-        url: `http://localhost:${PORT}/recordings/download/${r.id}`, // ✅ FIXED: Use absolute URL
+        url: `${PUBLIC_URL}/recordings/download/${r.id}`, // ✅ FIXED: Use PUBLIC_URL
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
       })),
@@ -1843,7 +1844,7 @@ app.post('/recordings/save', async (req, res) => {
       userId: Number(userId),
       sessionId,
       filename,
-      url: `http://localhost:${PORT}/recordings/download/${recordingId}`, // ✅ FIXED: Use absolute URL
+      url: `${PUBLIC_URL}/recordings/download/${recordingId}`, // ✅ FIXED: Use PUBLIC_URL
       recordedAt: new Date().toISOString(),
       durationMs: Number(durationMs) || 0,
     };
