@@ -1718,7 +1718,7 @@ app.post('/session/:id/stop', authMiddleware, allowRole('host'), async (req, res
     if (session.recordingActive && session.recordingSid) {
       try {
         console.log(`🎬 Stopping automatic Cloud Recording for session ${sessionId}...`);
-        await stopRecording(sessionId, session.recordingResourceId);
+        await stopRecording(sessionId, session.recordingResourceId, session.recordingSid, 'mix');
         session.recordingActive = false;
         console.log(`✅ Cloud Recording stopped!`);
       } catch (recordingError) {
