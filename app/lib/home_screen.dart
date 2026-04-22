@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'voice_call_screen.dart';
 import 'user_recordings_screen.dart';
+import 'admin_recordings_screen.dart';
 import 'auth_service.dart';
 import 'app_config.dart';
 
@@ -21,6 +22,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isHostOnline = false; // ✅ Default to offline
   bool _isLoading = true;
   Timer? _sessionStatusTimer; // ✅ Timer for polling session status
+  bool _isHost = false; // ✅ NEW: Track if current user is host/admin
 
   @override
   void initState() {
@@ -82,8 +84,10 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Load user info
   Future<void> _loadUserInfo() async {
     final username = await _authService.getUsername();
+    final isHost = await _authService.isHost();
     setState(() {
       _hostName = username ?? 'Host';
+      _isHost = isHost;
       _isLoading = false;
     });
   }
@@ -375,6 +379,79 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ),
+
+                      // ✅ NEW: Admin button for host/admin to view all recordings
+                      if (_isHost) ...[
+                        const SizedBox(height: 12),
+                        GestureDetector(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdminRecordingsScreen(
+                                  sessionId: 'test_room',
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(
+                                      color: Colors.blue,
+                                      width: 2,
+                                    ),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.admin_panel_settings,
+                                    color: Colors.blue,
+                                    size: 24,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'All Recordings (Admin)',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                        ),
+                                      ),
+                                      SizedBox(height: 4),
+                                      Text(
+                                        'View all users\' recordings',
+                                        style: TextStyle(
+                                          color: Colors.white54,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.arrow_forward,
+                                  color: Colors.white54,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
