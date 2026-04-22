@@ -1789,13 +1789,17 @@ app.get('/session/:id/status', (req, res) => {
  */
 app.get('/recordings', async (req, res) => {
   try {
-    const { sessionId, userId } = req.query;
+    let { sessionId, userId } = req.query;
 
     if (mongoReady) {
       // ✅ NEW: Query from MongoDB for persistent storage
       const filter = {};
       if (sessionId) filter.sessionId = sessionId;
-      if (userId) filter.userId = Number(userId);
+
+      // ✅ FIXED: Only filter by userId if it's a valid number (not NaN)
+      if (userId && !isNaN(parseInt(userId))) {
+        filter.userId = Number(userId);
+      }
 
       const recordings = await RecordingModel.find(filter)
         .sort({ recordedAt: -1 })
@@ -1820,8 +1824,8 @@ app.get('/recordings', async (req, res) => {
     if (sessionId) {
       recordings = recordings.filter((r) => r.sessionId === sessionId);
     }
-    if (userId) {
-      recordings = recordings.filter((r) => r.userId === userId);
+    if (userId && !isNaN(parseInt(userId))) {
+      recordings = recordings.filter((r) => r.userId === Number(userId));
     }
 
     recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
@@ -1978,8 +1982,19 @@ app.post('/recordings/save', async (req, res) => {
  */
 app.get('/recordings/user/:userId', async (req, res) => {
   try {
-    const userId = Number(req.params.userId);
+    const userIdParam = req.params.userId;
     const { sessionId } = req.query;
+
+    // ✅ FIXED: Validate userId is a valid number
+    const userId = Number(userIdParam);
+    if (isNaN(userId)) {
+      console.warn(`⚠️  Invalid userId: ${userIdParam} (NaN)`);
+      return res.json({
+        total: 0,
+        recordings: [],
+        warning: `Invalid user ID: ${userIdParam}`,
+      });
+    }
 
     console.log(`📋 Fetching recordings for userId: ${userId}, sessionId: ${sessionId}`);
 
