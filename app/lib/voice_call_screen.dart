@@ -910,6 +910,11 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   Future<void> _uploadRecording(File audioFile, int durationMs) async {
     try {
       final uri = Uri.parse('$_backendUrl/recordings/save');
+      print('📤 Starting upload to: $uri');
+      print('   File: ${audioFile.path}');
+      print('   Size: ${audioFile.lengthSync()} bytes');
+      print('   Duration: ${durationMs}ms');
+
       final request = http.MultipartRequest('POST', uri);
 
       // Add file
@@ -922,10 +927,15 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       request.fields['sessionId'] = _channelName;
       request.fields['durationMs'] = durationMs.toString();
 
-      final response = await request.send().timeout(const Duration(seconds: 30));
+      print('📤 Sending request...');
+      final response = await request.send().timeout(const Duration(seconds: 60));
+
+      print('📡 Response status: ${response.statusCode}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final responseBody = await response.stream.bytesToString();
+        print('📦 Response body: $responseBody');
+
         final data = jsonDecode(responseBody);
 
         // Create Recording object
@@ -939,24 +949,30 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           durationMs: durationMs,
         );
 
-        setState(() {
-          _userRecordings.add(recording);
-        });
+        if (mounted) {
+          setState(() {
+            _userRecordings.add(recording);
+          });
+        }
 
-        _showSuccessSnackBar('Recording saved! 🎙️');
-        print('📤 Recording uploaded successfully');
+        _showSuccessSnackBar('✅ Recording saved! 🎙️');
+        print('✅ Recording uploaded successfully - ID: ${data['recordingId']}');
       } else {
+        final responseBody = await response.stream.bytesToString();
         print('❌ Upload failed: ${response.statusCode}');
-        _showErrorSnackBar('Failed to upload recording');
+        print('   Response: $responseBody');
+        _showErrorSnackBar('Upload failed (${response.statusCode}): $responseBody');
       }
 
       // Clean up local file
       if (audioFile.existsSync()) {
         audioFile.deleteSync();
+        print('✓ Cleaned up temp file');
       }
     } catch (e) {
-      print('Error uploading recording: $e');
-      _showErrorSnackBar('Failed to upload recording: $e');
+      print('❌ Error uploading recording: $e');
+      print('   Stack trace: $e');
+      _showErrorSnackBar('Upload error: $e');
     }
   }
 
@@ -1169,6 +1185,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                           MaterialPageRoute(
                             builder: (context) => UserRecordingsScreen(
                               sessionId: _channelName,
+                              userId: _uid,  // ✅ NEW: Pass Agora UID
                             ),
                           ),
                         );

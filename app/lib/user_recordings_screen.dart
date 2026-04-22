@@ -9,10 +9,12 @@ import 'recording_list_widget.dart';
 /// ✅ NEW: Screen for users to view their personal recordings
 class UserRecordingsScreen extends StatefulWidget {
   final String sessionId;
+  final int? userId;  // ✅ NEW: Accept Agora UID as parameter
 
   const UserRecordingsScreen({
     super.key,
     required this.sessionId,
+    this.userId,  // ✅ NEW: Optional Agora UID
   });
 
   @override
@@ -43,33 +45,39 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         _error = '';
       });
 
-      // Get user ID
-      final userIdStr = await _authService.getUserId();
-      print('📋 Retrieved userId from AuthService: $userIdStr');
+      // ✅ NEW: If userId was passed as parameter, use it directly
+      if (widget.userId != null && widget.userId! > 0) {
+        _userId = widget.userId!;
+        print('✅ Using provided Agora UID: $_userId');
+      } else {
+        // Fallback: Get user ID from AuthService (for home screen)
+        final userIdStr = await _authService.getUserId();
+        print('📋 Retrieved userId from AuthService: $userIdStr');
 
-      if (userIdStr == null || userIdStr.isEmpty) {
-        setState(() {
-          _error = 'User ID not found - Please login again';
-          _isLoading = false;
-        });
-        return;
+        if (userIdStr == null || userIdStr.isEmpty) {
+          setState(() {
+            _error = 'User ID not found - Please login again';
+            _isLoading = false;
+          });
+          return;
+        }
+
+        // Parse userId - handle both string formats
+        _userId = int.tryParse(userIdStr) ?? 0;
+
+        // If parsing failed, try to extract from MongoDB ObjectId string
+        if (_userId == 0) {
+          // Try parsing as-is (MongoDB ObjectId strings are hex)
+          // For now, just use the string as-is for the API call
+          print('⚠️ Could not parse userId as int: $userIdStr, using string as-is');
+          _userId = 0;
+        }
+
+        print('✅ Parsed userId: $_userId');
       }
-
-      // Parse userId - handle both string formats
-      _userId = int.tryParse(userIdStr) ?? 0;
-
-      // If parsing failed, try to extract from MongoDB ObjectId string
-      if (_userId == 0) {
-        // Try parsing as-is (MongoDB ObjectId strings are hex)
-        // For now, just use the string as-is for the API call
-        print('⚠️ Could not parse userId as int: $userIdStr, using string as-is');
-        _userId = 0;
-      }
-
-      print('✅ Parsed userId: $_userId');
 
       // Construct the URL - use userIdStr if _userId is 0
-      final userIdForUrl = _userId > 0 ? _userId.toString() : userIdStr;
+      final userIdForUrl = _userId > 0 ? _userId.toString() : 'unknown';
       final url = '$_backendUrl/recordings/user/$userIdForUrl?sessionId=${widget.sessionId}';
       print('🌐 Fetching recordings from: $url');
 
