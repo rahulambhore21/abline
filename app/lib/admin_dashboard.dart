@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'auth_service.dart';
 import 'app_config.dart';
 import 'voice_call_screen.dart';
+import 'admin_recordings_screen.dart';
 
 /// Admin dashboard showing overview statistics
 class AdminDashboard extends StatefulWidget {
@@ -594,34 +595,61 @@ class _AdminDashboardState extends State<AdminDashboard> {
             LayoutBuilder(
               builder: (context, constraints) {
                 if (constraints.maxWidth > 600) {
-                  return Row(
+                  return Column(
                     children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: _loadDashboardData,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text('Refresh'),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: _loadDashboardData,
+                              icon: const Icon(Icons.refresh),
+                              label: const Text('Refresh'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.blue,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                            ),
                           ),
-                        ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('System health check passed ✅'),
+                                  ),
+                                );
+                              },
+                              icon: const Icon(Icons.health_and_safety),
+                              label: const Text('Health Check'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('System health check passed ✅'),
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdminRecordingsScreen(
+                                  sessionId: 'test_room',
+                                ),
                               ),
                             );
                           },
-                          icon: const Icon(Icons.health_and_safety),
-                          label: const Text('Health Check'),
+                          icon: const Icon(Icons.library_music),
+                          label: const Text('All Recordings by User'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.green,
+                            backgroundColor: Colors.purple,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
@@ -660,6 +688,29 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           label: const Text('Health Check'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const AdminRecordingsScreen(
+                                  sessionId: 'test_room',
+                                ),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.library_music),
+                          label: const Text('All Recordings by User'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.purple,
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
