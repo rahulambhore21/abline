@@ -1260,10 +1260,30 @@ app.post('/events/speaking', async (req, res) => {
   try {
     const { userId, sessionId, start, end } = req.body;
 
-    // Validate required fields
-    if (!userId || !sessionId || !start || !end) {
+    // ✅ FIXED: Use proper null/undefined checks instead of falsy checks
+    // (userId can be 0, which is falsy but valid)
+    if (userId === null || userId === undefined) {
       return res.status(400).json({
-        error: 'Missing required fields: userId, sessionId, start, end',
+        error: 'Missing required field: userId',
+        received: { userId, sessionId, start, end },
+      });
+    }
+    if (!sessionId) {
+      return res.status(400).json({
+        error: 'Missing required field: sessionId',
+        received: { userId, sessionId, start, end },
+      });
+    }
+    if (!start) {
+      return res.status(400).json({
+        error: 'Missing required field: start',
+        received: { userId, sessionId, start, end },
+      });
+    }
+    if (!end) {
+      return res.status(400).json({
+        error: 'Missing required field: end',
+        received: { userId, sessionId, start, end },
       });
     }
 
@@ -1305,7 +1325,7 @@ app.post('/events/speaking', async (req, res) => {
     }
 
     console.log(
-      `📝 Speaking event recorded: User ${userId} spoke for ${Math.round(event.duration / 1000)}s` +
+      `✅ Speaking event recorded: User ${userId} spoke for ${Math.round(event.duration / 1000)}s` +
           (mongoReady ? ' (MongoDB)' : ' (memory)')
     );
 
@@ -1420,7 +1440,8 @@ app.post('/session/:id/users/add', (req, res) => {
     const { id: sessionId } = req.params;
     const { userId, username, role } = req.body;
 
-    if (!userId || !username) {
+    // ✅ FIXED: Use proper null/undefined checks (userId can be 0)
+    if (userId === null || userId === undefined || !username) {
       return res.status(400).json({
         error: 'Missing required fields: userId, username',
       });
@@ -1719,14 +1740,42 @@ app.get('/recordings', (req, res) => {
  */
 app.post('/recordings/save', async (req, res) => {
   try {
+    console.log('📥 Recording upload request received');
+    console.log('   Body:', req.body);
+    console.log('   Files:', req.files ? Object.keys(req.files) : 'NONE');
+
     const { userId, sessionId, durationMs } = req.body;
     const audioFile = req.files?.audioFile;
 
-    if (!userId || !sessionId || !audioFile) {
+    // Detailed validation logging
+    // ✅ FIXED: Use proper null/undefined checks (userId can be 0)
+    if (userId === null || userId === undefined) {
+      console.error('❌ Missing: userId');
       return res.status(400).json({
-        error: 'Missing required fields: userId, sessionId, audioFile',
+        error: 'Missing required fields: userId',
+        received: { userId, sessionId, hasFile: !!audioFile },
       });
     }
+    if (!sessionId) {
+      console.error('❌ Missing: sessionId');
+      return res.status(400).json({
+        error: 'Missing required fields: sessionId',
+        received: { userId, sessionId, hasFile: !!audioFile },
+      });
+    }
+    if (!audioFile) {
+      console.error('❌ Missing: audioFile');
+      console.error('   Available files:', req.files ? Object.keys(req.files) : 'NONE');
+      return res.status(400).json({
+        error: 'Missing required fields: audioFile',
+        received: { userId, sessionId, hasFile: !!audioFile },
+        availableFiles: req.files ? Object.keys(req.files) : [],
+      });
+    }
+
+    console.log(`✅ All fields received - Starting save process`);
+    console.log(`   User: ${userId}, Session: ${sessionId}, Duration: ${durationMs}ms`);
+    console.log(`   File size: ${audioFile.size} bytes`);
 
     // Generate unique filename
     const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1735,13 +1784,23 @@ app.post('/recordings/save', async (req, res) => {
     // For now, store locally in a recordings folder (in production, use S3)
     const recordingsDir = path.join(__dirname, 'recordings');
     if (!fs.existsSync(recordingsDir)) {
+      console.log(`📁 Creating recordings directory: ${recordingsDir}`);
       fs.mkdirSync(recordingsDir, { recursive: true });
     }
 
     const filePath = path.join(recordingsDir, filename);
 
     // Save file locally
+    console.log(`💾 Saving file to: ${filePath}`);
     await audioFile.mv(filePath);
+    console.log(`✅ File saved successfully`);
+
+    // Verify file exists
+    if (!fs.existsSync(filePath)) {
+      throw new Error('File was not saved to disk');
+    }
+    const fileSize = fs.statSync(filePath).size;
+    console.log(`✓ File verified - Size: ${fileSize} bytes`);
 
     // Store recording metadata
     const recording = {
@@ -1757,7 +1816,8 @@ app.post('/recordings/save', async (req, res) => {
     recordingsStorage.set(recordingId, recording);
     cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
 
-    console.log(`✅ Recording saved: User ${userId}, Session ${sessionId}, Duration ${durationMs}ms`);
+    console.log(`✅ Recording metadata stored - Total recordings: ${recordingsStorage.size}`);
+    console.log(`✅ Recording saved: User ${userId}, Session ${sessionId}, Duration ${durationMs}ms, ID: ${recordingId}`);
 
     res.status(201).json({
       success: true,
@@ -1766,7 +1826,8 @@ app.post('/recordings/save', async (req, res) => {
       message: `Recording saved for user ${userId}`,
     });
   } catch (error) {
-    console.error('❌ Error saving recording:', error);
+    console.error('❌ Error saving recording:', error.message);
+    console.error('   Stack:', error.stack);
     res.status(500).json({
       error: 'Failed to save recording',
       message: error.message,
