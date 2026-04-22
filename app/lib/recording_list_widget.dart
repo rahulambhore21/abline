@@ -82,6 +82,33 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     return '$minutes:$seconds';
   }
 
+  /// Get date string from DateTime (Indian Standard Time - IST, UTC+5:30)
+  String _getDateString(DateTime dateTime) {
+    // Convert UTC to Indian Standard Time (IST, UTC+5:30)
+    final istTime = dateTime.add(const Duration(hours: 5, minutes: 30));
+
+    return '${istTime.day} ${_getMonthName(istTime.month)} ${istTime.year}';
+  }
+
+  /// Get month name
+  String _getMonthName(int month) {
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec'
+    ];
+    return months[month - 1];
+  }
+
   /// Format time as HH:MM AM/PM (Indian Standard Time - IST, UTC+5:30)
   String _formatTime(DateTime dateTime) {
     // Convert UTC to Indian Standard Time (IST, UTC+5:30)
@@ -95,14 +122,6 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     final ampm = hour >= 12 ? 'PM' : 'AM';
 
     return '${hour12.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')} $ampm';
-  }
-
-  /// Get date string from DateTime (Indian Standard Time - IST, UTC+5:30)
-  String _getDateString(DateTime dateTime) {
-    // Convert UTC to Indian Standard Time (IST, UTC+5:30)
-    final istTime = dateTime.add(const Duration(hours: 5, minutes: 30));
-
-    return '${istTime.day} ${_getMonthName(istTime.month)} ${istTime.year}';
   }
 
   /// Group recordings by date
