@@ -84,7 +84,14 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Load user info
   Future<void> _loadUserInfo() async {
     final username = await _authService.getUsername();
+    final role = await _authService.getRole();
     final isHost = await _authService.isHost();
+
+    print('🔍 User Info:');
+    print('  - Username: $username');
+    print('  - Role: $role');
+    print('  - Is Host: $isHost');
+
     setState(() {
       _hostName = username ?? 'Host';
       _isHost = isHost;
