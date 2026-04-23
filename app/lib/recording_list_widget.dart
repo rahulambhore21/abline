@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:http/http.dart' as http;
 import 'recording.dart';
+import 'auth_service.dart';
+import 'app_config.dart';
 
 class RecordingListWidget extends StatefulWidget {
   final List<Recording> recordings;
@@ -18,12 +21,14 @@ class RecordingListWidget extends StatefulWidget {
 
 class _RecordingListWidgetState extends State<RecordingListWidget> {
   late AudioPlayer _audioPlayer;
+  late AuthService _authService;
   String? _currentPlayingRecordingId;
 
   @override
   void initState() {
     super.initState();
     _audioPlayer = AudioPlayer();
+    _authService = AuthService(backendUrl: AppConfig.backendBaseUrl);
     _setupAudioPlayerListeners();
   }
 
@@ -51,11 +56,25 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
         _currentPlayingRecordingId = recording.id;
       });
 
-      // Load and play the audio
-      await _audioPlayer.setUrl(recording.url);
+      // Get auth token
+      final token = await _authService.getToken();
+      if (token == null) {
+        throw Exception('Authentication token not found');
+      }
+
+      // Load and play the audio with authorization header
+      await _audioPlayer.setUrl(
+        recording.url,
+        headers: {
+          'Authorization': 'Bearer $token',
+        },
+      );
       await _audioPlayer.play();
     } catch (e) {
       print('Error playing recording: $e');
+      setState(() {
+        _currentPlayingRecordingId = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error playing audio: $e'),

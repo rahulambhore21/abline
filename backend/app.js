@@ -2106,7 +2106,7 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
  * ✅ NEW: GET /recordings/download/:recordingId
  * Download a specific recording file
  */
-app.get('/recordings/download/:recordingId', (req, res) => {
+app.get('/recordings/download/:recordingId', authMiddleware, (req, res) => {
   try {
     const recording = recordingsStorage.get(req.params.recordingId);
 
@@ -2124,9 +2124,10 @@ app.get('/recordings/download/:recordingId', (req, res) => {
       });
     }
 
-    // Send file with appropriate headers
+    // Send file with appropriate headers for streaming
     res.setHeader('Content-Type', 'audio/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="${recording.filename}"`);
+    res.setHeader('Accept-Ranges', 'bytes');
+    res.setHeader('Cache-Control', 'public, max-age=3600');
     res.sendFile(filePath);
 
     console.log(`📥 Downloaded recording: ${recording.filename}`);

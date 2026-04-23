@@ -17,7 +17,6 @@ class AdminRecordingManager extends StatefulWidget {
 class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   late AuthService _authService;
   List<Map<String, dynamic>> _activeRecordings = [];
-  List<Map<String, dynamic>> _speakingEvents = [];
   Map<String, List<Recording>> _recordingsByUser = {}; // ✅ FIXED: Use String key for userId
   List<Recording> _allSessionRecordings = [];
   bool _isLoading = true;
@@ -48,15 +47,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         final data = jsonDecode(recordingsResponse.body);
         setState(() {
           _activeRecordings = List<Map<String, dynamic>>.from(data['recordings'] ?? []);
-        });
-      }
-
-      final eventsResponse = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/events/speaking'));
-      if (eventsResponse.statusCode == 200) {
-        final data = jsonDecode(eventsResponse.body);
-        setState(() {
-          _speakingEvents = List<Map<String, dynamic>>.from(data['events'] ?? []);
         });
       }
 
@@ -341,108 +331,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                     ),
                   );
                 }).toList(),
-              ),
-
-            const SizedBox(height: 40),
-
-            const Text(
-              'Recent Speaking Events',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            if (_speakingEvents.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3a3a3a),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Center(
-                  child: Text(
-                    'No speaking events',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                ),
-              )
-            else
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3a3a3a),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: ListView.builder(
-                  itemCount: _speakingEvents.length,
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemBuilder: (context, index) {
-                    final event = _speakingEvents[index];
-                    final duration = event['duration'] ?? 0;
-                    return Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: BorderSide(
-                            color: Colors.white10,
-                            width: index < _speakingEvents.length - 1 ? 1 : 0,
-                          ),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 48,
-                            height: 48,
-                            decoration: BoxDecoration(
-                              color: Colors.green.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: Text(
-                                'U${event['userId']}',
-                                style: const TextStyle(
-                                  color: Colors.green,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'User ${event['userId']} - Session ${event['sessionId']}',
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w500,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  'Duration: ${duration}s',
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
               ),
 
             // ✅ NEW: All Recordings by User Section
