@@ -339,7 +339,7 @@ async function loadRecordingsFromDatabase() {
       const recordings = await RecordingModel.find().lean();
       for (const rec of recordings) {
         recordingsStorage.set(rec.recordingId, {
-          id: rec.recordingId,
+          recordingId: rec.recordingId,
           userId: rec.userId,
           sessionId: rec.sessionId,
           filename: rec.filename,
@@ -2128,6 +2128,7 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
  * ✅ NEW: GET /recordings/download/:recordingId
  * Download a specific recording file
  * Supports auth via header or query parameter for compatibility with audio players
+ * Handles both local files and S3 URLs
  */
 app.get('/recordings/download/:recordingId', (req, res) => {
   try {
@@ -2153,21 +2154,39 @@ app.get('/recordings/download/:recordingId', (req, res) => {
     console.log(`📊 Total recordings in storage: ${recordingsStorage.size}`);
 
     if (!recording) {
-      console.warn(`❌ Recording not found: ${req.params.recordingId}`);
+      console.warn(`❌ Recording not found in memory: ${req.params.recordingId}`);
       return res.status(404).json({
         error: 'Recording not found',
         recordingId: req.params.recordingId,
       });
     }
 
+    // Check if recording has an S3 URL (cloud recording)
+    if (recording.url && recording.url.includes('s3') || recording.url.includes('amazonaws')) {
+      console.log(`☁️  Redirecting to S3 URL for recording: ${recording.filename}`);
+      // Redirect to S3 URL for cloud recordings
+      return res.redirect(recording.url);
+    }
+
+    // Otherwise, try to serve local file
     const filePath = path.join(__dirname, 'recordings', recording.filename);
     console.log(`📁 Checking file path: ${filePath}`);
 
     if (!fs.existsSync(filePath)) {
       console.error(`❌ Recording file not found on disk: ${filePath}`);
+      console.log(`📝 Recording URL: ${recording.url}`);
+      console.log(`📝 Recording filename: ${recording.filename}`);
+
+      // If local file doesn't exist but we have a URL, try redirecting to it
+      if (recording.url) {
+        console.log(`🔄 Attempting to redirect to URL: ${recording.url}`);
+        return res.redirect(recording.url);
+      }
+
       return res.status(404).json({
         error: 'Recording file not found',
         filename: recording.filename,
+        recordingId: req.params.recordingId,
       });
     }
 
@@ -2178,7 +2197,7 @@ app.get('/recordings/download/:recordingId', (req, res) => {
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.sendFile(filePath);
 
-    console.log(`✅ Streaming recording: ${recording.filename}`);
+    console.log(`✅ Streaming local recording: ${recording.filename}`);
   } catch (error) {
     console.error('Error downloading recording:', error);
     res.status(500).json({
@@ -2399,6 +2418,54 @@ app.post('/test/recording', authMiddleware, allowRole('host'), async (req, res) 
         ],
       },
     });
+  }
+});
+
+/**
+ * 🔍 DEBUG: GET /debug/recordings
+ * Show all recordings in memory and database
+ */
+app.get('/debug/recordings', (req, res) => {
+  try {
+    const inMemory = Array.from(recordingsStorage.values());
+    res.json({
+      inMemoryCount: recordingsStorage.size,
+      inMemory: inMemory.slice(0, 10), // Show first 10
+      storageSize: recordingsStorage.size,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+/**
+ * 🔍 DEBUG: GET /debug/recording/:recordingId
+ * Check if a specific recording exists
+ */
+app.get('/debug/recording/:recordingId', (req, res) => {
+  try {
+    const recording = recordingsStorage.get(req.params.recordingId);
+    if (!recording) {
+      return res.status(404).json({
+        found: false,
+        recordingId: req.params.recordingId,
+        message: 'Recording not found in storage',
+      });
+    }
+
+    const filePath = path.join(__dirname, 'recordings', recording.filename);
+    const fileExists = fs.existsSync(filePath);
+
+    res.json({
+      found: true,
+      recordingId: req.params.recordingId,
+      recording,
+      fileExists,
+      filePath: fileExists ? filePath : 'N/A',
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

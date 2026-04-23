@@ -64,13 +64,22 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
 
       // Add token as query parameter for better compatibility with audio players
       final urlWithToken = '${recording.url}?token=$token';
-      print('🎵 Playing recording from: $urlWithToken');
+      print('🎵 === PLAYING RECORDING ===');
+      print('📝 Recording ID: ${recording.id}');
+      print('📝 Original URL: ${recording.url}');
+      print('🔗 URL with token: $urlWithToken');
+      print('📝 Filename: ${recording.filename}');
+      print('⏱️  Duration: ${recording.durationMs}ms');
+      print('👤 User ID: ${recording.userId}');
+      print('🎙️  Session ID: ${recording.sessionId}');
+      print('========================');
 
       // Load and play the audio
       await _audioPlayer.setUrl(urlWithToken);
       await _audioPlayer.play();
     } catch (e) {
-      print('Error playing recording: $e');
+      print('❌ Error playing recording: $e');
+      print('   Stack trace: ${StackTrace.current}');
       setState(() {
         _currentPlayingRecordingId = null;
       });
@@ -78,6 +87,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
         SnackBar(
           content: Text('Error playing audio: $e'),
           backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
         ),
       );
     }

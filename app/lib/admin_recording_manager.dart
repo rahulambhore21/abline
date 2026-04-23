@@ -60,9 +60,13 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         );
 
         print('📡 Session recordings response: ${userRecordingsResponse.statusCode}');
+        print('📊 Response body: ${userRecordingsResponse.body}');
 
         if (userRecordingsResponse.statusCode == 200) {
           final data = jsonDecode(userRecordingsResponse.body);
+          print('📝 Total recordings in response: ${data['total']}');
+          print('📝 Recording count by user: ${data['byUser']?.keys.length ?? 0}');
+
           final recordingsList = (data['recordings'] as List?)
               ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
               .toList() ?? [];
@@ -84,12 +88,14 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
 
           print('✅ Loaded ${recordingsList.length} session recordings');
           print('✅ Users with recordings: ${byUser.keys.toList()}');
+          print('📋 Sample recording: ${recordingsList.isNotEmpty ? recordingsList.first.url : "None"}');
         } else {
           print('⚠️ Session recordings response: ${userRecordingsResponse.statusCode}');
           print('📄 Body: ${userRecordingsResponse.body}');
         }
       } catch (e) {
         print('❌ Error loading user recordings: $e');
+        print('   Stack: ${StackTrace.current}');
         // Don't treat this as a fatal error
       }
 
@@ -99,6 +105,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         _error = 'Error loading recording data: $e';
         _isLoading = false;
       });
+      print('❌ Error in _loadRecordingData: $e');
     }
   }
 
