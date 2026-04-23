@@ -2162,42 +2162,61 @@ app.get('/recordings/download/:recordingId', (req, res) => {
     }
 
     // Check if recording has an S3 URL (cloud recording)
-    if (recording.url && recording.url.includes('s3') || recording.url.includes('amazonaws')) {
+    if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
       console.log(`☁️  Redirecting to S3 URL for recording: ${recording.filename}`);
-      // Redirect to S3 URL for cloud recordings
+      // Redirect to S3 URL for cloud recordings (S3 URLs don't need auth)
       return res.redirect(recording.url);
     }
 
-    // Otherwise, try to serve local file
+    // Otherwise, try to serve local file first
     const filePath = path.join(__dirname, 'recordings', recording.filename);
     console.log(`📁 Checking file path: ${filePath}`);
 
-    if (!fs.existsSync(filePath)) {
-      console.error(`❌ Recording file not found on disk: ${filePath}`);
-      console.log(`📝 Recording URL: ${recording.url}`);
-      console.log(`📝 Recording filename: ${recording.filename}`);
+    if (fs.existsSync(filePath)) {
+      // Send local file with appropriate headers for streaming
+      res.setHeader('Content-Type', 'audio/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
+      res.setHeader('Cache-Control', 'public, max-age=3600');
+      res.setHeader('Access-Control-Allow-Origin', '*');
+      console.log(`✅ Streaming local recording: ${recording.filename}`);
+      return res.sendFile(filePath);
+    }
 
-      // If local file doesn't exist but we have a URL, try redirecting to it
-      if (recording.url) {
-        console.log(`🔄 Attempting to redirect to URL: ${recording.url}`);
-        return res.redirect(recording.url);
-      }
+    // If local file doesn't exist, try to proxy from remote URL
+    if (recording.url) {
+      console.log(`🌐 Proxying from remote URL: ${recording.url}`);
+      const https = require('https');
 
-      return res.status(404).json({
+      https.get(recording.url, (remoteRes) => {
+        if (remoteRes.statusCode === 200) {
+          console.log(`✅ Successfully fetched from remote: ${recording.url}`);
+          res.setHeader('Content-Type', remoteRes.headers['content-type'] || 'audio/mp4');
+          res.setHeader('Accept-Ranges', 'bytes');
+          res.setHeader('Access-Control-Allow-Origin', '*');
+          remoteRes.pipe(res);
+        } else {
+          console.error(`❌ Remote URL returned ${remoteRes.statusCode}`);
+          res.status(remoteRes.statusCode).json({
+            error: 'Failed to fetch from remote URL',
+            url: recording.url,
+            status: remoteRes.statusCode,
+          });
+        }
+      }).on('error', (error) => {
+        console.error(`❌ Error fetching from remote URL: ${error.message}`);
+        res.status(500).json({
+          error: 'Failed to fetch recording from remote URL',
+          message: error.message,
+        });
+      });
+    } else {
+      console.error(`❌ Recording file not found and no remote URL available`);
+      res.status(404).json({
         error: 'Recording file not found',
         filename: recording.filename,
         recordingId: req.params.recordingId,
       });
     }
-
-    // Send file with appropriate headers for streaming
-    res.setHeader('Content-Type', 'audio/mp4');
-    res.setHeader('Accept-Ranges', 'bytes');
-    res.setHeader('Cache-Control', 'public, max-age=3600');
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.sendFile(filePath);
-
-    console.log(`✅ Streaming local recording: ${recording.filename}`);
   } catch (error) {
     console.error('Error downloading recording:', error);
     res.status(500).json({
