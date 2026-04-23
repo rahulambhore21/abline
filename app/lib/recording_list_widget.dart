@@ -62,13 +62,12 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
         throw Exception('Authentication token not found');
       }
 
-      // Load and play the audio with authorization header
-      await _audioPlayer.setUrl(
-        recording.url,
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
-      );
+      // Add token as query parameter for better compatibility with audio players
+      final urlWithToken = '${recording.url}?token=$token';
+      print('🎵 Playing recording from: $urlWithToken');
+
+      // Load and play the audio
+      await _audioPlayer.setUrl(urlWithToken);
       await _audioPlayer.play();
     } catch (e) {
       print('Error playing recording: $e');

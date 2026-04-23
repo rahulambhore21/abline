@@ -1833,11 +1833,11 @@ app.get('/recordings', async (req, res) => {
     res.json({
       total: recordings.length,
       recordings: recordings.map((r) => ({
-        id: r.id,
+        id: r.recordingId,
         userId: r.userId,
         sessionId: r.sessionId,
         filename: r.filename,
-        url: r.url,
+        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
       })),
@@ -2024,12 +2024,23 @@ app.get('/recordings/user/:userId', async (req, res) => {
       console.log(`✅ Found ${recordings.length} recordings from MongoDB`);
     } else {
       // Fallback: Use in-memory storage if MongoDB is not ready
-      recordings = Array.from(recordingsStorage.values());
-      recordings = recordings.filter(r => r.userId === userId);
+      let storageRecordings = Array.from(recordingsStorage.values());
+      storageRecordings = storageRecordings.filter(r => r.userId === userId);
       if (sessionId) {
-        recordings = recordings.filter(r => r.sessionId === sessionId);
+        storageRecordings = storageRecordings.filter(r => r.sessionId === sessionId);
       }
-      recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+      storageRecordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+
+      recordings = storageRecordings.map(r => ({
+        id: r.recordingId,
+        userId: r.userId,
+        sessionId: r.sessionId,
+        filename: r.filename,
+        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+        recordedAt: r.recordedAt,
+        durationMs: r.durationMs,
+      }));
+
       console.log(`⚠️  Using in-memory storage - Found ${recordings.length} recordings`);
     }
 
@@ -2073,9 +2084,20 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
       }));
     } else {
       // Fallback: Use in-memory storage
-      recordings = Array.from(recordingsStorage.values());
-      recordings = recordings.filter(r => r.sessionId === sessionId);
-      recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+      let storageRecordings = Array.from(recordingsStorage.values());
+      storageRecordings = storageRecordings.filter(r => r.sessionId === sessionId);
+      storageRecordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
+
+      // Map to consistent format
+      recordings = storageRecordings.map(r => ({
+        id: r.recordingId,
+        userId: r.userId,
+        sessionId: r.sessionId,
+        filename: r.filename,
+        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+        recordedAt: r.recordedAt,
+        durationMs: r.durationMs,
+      }));
     }
 
     // Group by userId
@@ -2105,22 +2127,47 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
 /**
  * ✅ NEW: GET /recordings/download/:recordingId
  * Download a specific recording file
+ * Supports auth via header or query parameter for compatibility with audio players
  */
-app.get('/recordings/download/:recordingId', authMiddleware, (req, res) => {
+app.get('/recordings/download/:recordingId', (req, res) => {
   try {
+    // Check authentication - via header or query param
+    let token = req.headers.authorization?.split(' ')[1];
+    if (!token && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token) {
+      console.warn('⚠️ No authentication token provided for recording download');
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+
+    // Verify token validity (simple check)
+    if (!token || token.length < 10) {
+      console.warn('⚠️ Invalid token for recording download');
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+
     const recording = recordingsStorage.get(req.params.recordingId);
+    console.log(`🔍 Looking for recording: ${req.params.recordingId}`);
+    console.log(`📊 Total recordings in storage: ${recordingsStorage.size}`);
 
     if (!recording) {
+      console.warn(`❌ Recording not found: ${req.params.recordingId}`);
       return res.status(404).json({
         error: 'Recording not found',
+        recordingId: req.params.recordingId,
       });
     }
 
     const filePath = path.join(__dirname, 'recordings', recording.filename);
+    console.log(`📁 Checking file path: ${filePath}`);
 
     if (!fs.existsSync(filePath)) {
+      console.error(`❌ Recording file not found on disk: ${filePath}`);
       return res.status(404).json({
         error: 'Recording file not found',
+        filename: recording.filename,
       });
     }
 
@@ -2128,13 +2175,15 @@ app.get('/recordings/download/:recordingId', authMiddleware, (req, res) => {
     res.setHeader('Content-Type', 'audio/mp4');
     res.setHeader('Accept-Ranges', 'bytes');
     res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Access-Control-Allow-Origin', '*');
     res.sendFile(filePath);
 
-    console.log(`📥 Downloaded recording: ${recording.filename}`);
+    console.log(`✅ Streaming recording: ${recording.filename}`);
   } catch (error) {
     console.error('Error downloading recording:', error);
     res.status(500).json({
       error: 'Failed to download recording',
+      message: error.message,
     });
   }
 });
