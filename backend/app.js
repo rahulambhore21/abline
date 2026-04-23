@@ -2187,7 +2187,14 @@ app.get('/recordings/download/:recordingId', (req, res) => {
       console.log(`🌐 Proxying from remote URL: ${recording.url}`);
       const https = require('https');
 
-      https.get(recording.url, (remoteRes) => {
+      // Include token in the proxied request
+      const urlWithToken = recording.url.includes('?')
+        ? `${recording.url}&token=${token}`
+        : `${recording.url}?token=${token}`;
+
+      console.log(`🔐 Proxying with token to: ${urlWithToken.split('?')[0]}...`);
+
+      https.get(urlWithToken, (remoteRes) => {
         if (remoteRes.statusCode === 200) {
           console.log(`✅ Successfully fetched from remote: ${recording.url}`);
           res.setHeader('Content-Type', remoteRes.headers['content-type'] || 'audio/mp4');
