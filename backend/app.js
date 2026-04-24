@@ -1814,9 +1814,44 @@ app.get('/session/:id/status', (req, res) => {
  *   - sessionId (optional): Filter by session ID
  *   - userId (optional): Filter by user ID
  */
+/**
+ * ✅ OPTIMIZED: Check if a recording file actually exists
+ * Used internally to verify recordings before returning them
+ */
+function recordingExists(recordingId) {
+  // Check in-memory cache first
+  if (!recordingsStorage.has(recordingId)) {
+    return false;
+  }
+
+  const recording = recordingsStorage.get(recordingId);
+
+  // Check if file exists on disk (if it's a local recording)
+  if (recording.filename) {
+    const filePath = path.join(__dirname, 'recordings', recording.filename);
+    return fs.existsSync(filePath);
+  }
+
+  // If it has an S3 URL, assume it exists (we can't verify S3 without credentials)
+  if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * GET /recordings
+ * Fetch recordings for a session (with file existence verification)
+ * Query params:
+ *   - sessionId (optional): Filter by session ID
+ *   - userId (optional): Filter by user ID
+ *   - verify (optional): If true, only return recordings that actually exist (default: true)
+ */
 app.get('/recordings', async (req, res) => {
   try {
-    let { sessionId, userId } = req.query;
+    let { sessionId, userId, verify } = req.query;
+    const shouldVerify = verify !== 'false'; // Default to true
 
     if (mongoReady) {
       // ✅ NEW: Query from MongoDB for persistent storage
@@ -1828,12 +1863,40 @@ app.get('/recordings', async (req, res) => {
         filter.userId = Number(userId);
       }
 
-      const recordings = await RecordingModel.find(filter)
+      let recordings = await RecordingModel.find(filter)
         .sort({ recordedAt: -1 })
         .lean();
 
+      // ✅ OPTIMIZED: Filter out non-existent recordings
+      if (shouldVerify) {
+        const verified = [];
+        const deleted = [];
+
+        for (const r of recordings) {
+          if (recordingExists(r.recordingId)) {
+            verified.push(r);
+          } else {
+            deleted.push(r.recordingId);
+            console.log(`⚠️ Recording file missing, removing from results: ${r.recordingId}`);
+          }
+        }
+
+        if (deleted.length > 0) {
+          console.log(`🗑️ Cleaning up ${deleted.length} orphaned recordings from database...`);
+          try {
+            await RecordingModel.deleteMany({ recordingId: { $in: deleted } });
+            console.log(`✅ Removed ${deleted.length} orphaned records from database`);
+          } catch (dbErr) {
+            console.error(`⚠️ Failed to remove orphaned records: ${dbErr.message}`);
+          }
+        }
+
+        recordings = verified;
+      }
+
       return res.json({
         total: recordings.length,
+        verified: shouldVerify ? recordings.length : 'not checked',
         recordings: recordings.map((r) => ({
           id: r.recordingId,
           userId: r.userId,
@@ -1855,10 +1918,16 @@ app.get('/recordings', async (req, res) => {
       recordings = recordings.filter((r) => r.userId === Number(userId));
     }
 
+    // ✅ OPTIMIZED: Filter out non-existent recordings
+    if (shouldVerify) {
+      recordings = recordings.filter((r) => recordingExists(r.recordingId));
+    }
+
     recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
 
     res.json({
       total: recordings.length,
+      verified: shouldVerify ? recordings.length : 'not checked',
       recordings: recordings.map((r) => ({
         id: r.recordingId,
         userId: r.userId,
@@ -2128,6 +2197,80 @@ app.get('/recordings/user/:userId', async (req, res) => {
 });
 
 /**
+ * ✅ NEW: GET /recordings/sessions
+ * List all unique sessions that have recordings (admin view)
+ * Returns sessionId, recordingCount, and latestRecordingDate
+ */
+app.get('/recordings/sessions', authMiddleware, allowRole('host'), async (req, res) => {
+  try {
+    if (mongoReady) {
+      // Use aggregation to get unique sessions and their counts
+      const sessions = await RecordingModel.aggregate([
+        {
+          $group: {
+            _id: '$sessionId',
+            recordingCount: { $sum: 1 },
+            latestRecordingDate: { $max: '$recordedAt' },
+            userIds: { $addToSet: '$userId' }
+          }
+        },
+        {
+          $project: {
+            sessionId: '$_id',
+            recordingCount: 1,
+            latestRecordingDate: 1,
+            userCount: { $size: '$userIds' },
+            _id: 0
+          }
+        },
+        { $sort: { latestRecordingDate: -1 } }
+      ]);
+
+      return res.json({
+        total: sessions.length,
+        sessions
+      });
+    } else {
+      // Fallback: Use in-memory storage
+      const sessionsMap = new Map();
+      recordingsStorage.forEach(r => {
+        if (!sessionsMap.has(r.sessionId)) {
+          sessionsMap.set(r.sessionId, {
+            sessionId: r.sessionId,
+            recordingCount: 0,
+            latestRecordingDate: r.recordedAt,
+            users: new Set()
+          });
+        }
+        const s = sessionsMap.get(r.sessionId);
+        s.recordingCount++;
+        s.users.add(r.userId);
+        if (new Date(r.recordedAt) > new Date(s.latestRecordingDate)) {
+          s.latestRecordingDate = r.recordedAt;
+        }
+      });
+
+      const sessions = Array.from(sessionsMap.values()).map(s => ({
+        sessionId: s.sessionId,
+        recordingCount: s.recordingCount,
+        latestRecordingDate: s.latestRecordingDate,
+        userCount: s.users.size
+      }));
+
+      sessions.sort((a, b) => new Date(b.latestRecordingDate) - new Date(a.latestRecordingDate));
+
+      return res.json({
+        total: sessions.length,
+        sessions
+      });
+    }
+  } catch (error) {
+    console.error('Error fetching sessions list:', error);
+    res.status(500).json({ error: 'Failed to fetch sessions list' });
+  }
+});
+
+/**
  * ✅ NEW: GET /recordings/session/:sessionId
  * Get all recordings for a session, organized by user (admin view)
  * Requires: host role
@@ -2135,6 +2278,8 @@ app.get('/recordings/user/:userId', async (req, res) => {
 app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), async (req, res) => {
   try {
     const sessionId = req.params.sessionId;
+    const { verify } = req.query;
+    const shouldVerify = verify !== 'false'; // Default to true if not specified
 
     let recordings = [];
 
@@ -2169,6 +2314,33 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
       }));
+    }
+
+    // ✅ NEW: Filter out non-existent recordings
+    if (shouldVerify) {
+      const verified = [];
+      const deleted = [];
+
+      for (const r of recordings) {
+        if (recordingExists(r.id)) {
+          verified.push(r);
+        } else {
+          deleted.push(r.id);
+          console.log(`⚠️ Admin view: Recording file missing, removing from results: ${r.id}`);
+        }
+      }
+
+      if (deleted.length > 0 && mongoReady) {
+        console.log(`🗑️ Admin view: Cleaning up ${deleted.length} orphaned recordings from database...`);
+        try {
+          await RecordingModel.deleteMany({ recordingId: { $in: deleted } });
+          console.log(`✅ Admin view: Removed ${deleted.length} orphaned records from database`);
+        } catch (dbErr) {
+          console.error(`⚠️ Admin view: Failed to remove orphaned records: ${dbErr.message}`);
+        }
+      }
+
+      recordings = verified;
     }
 
     // Group by userId

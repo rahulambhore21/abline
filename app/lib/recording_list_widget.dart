@@ -23,6 +23,10 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
   late AudioPlayer _audioPlayer;
   late AuthService _authService;
   String? _currentPlayingRecordingId;
+  
+  // ✅ NEW: Track which recordings exist on the server
+  Map<String, bool> _recordingExistenceCache = {};
+  bool _isVerifyingRecordings = false;
 
   @override
   void initState() {
@@ -30,6 +34,8 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     _audioPlayer = AudioPlayer();
     _authService = AuthService(backendUrl: AppConfig.backendBaseUrl);
     _setupAudioPlayerListeners();
+    // ✅ NEW: Verify all recordings exist on app load
+    _verifyAllRecordingsExist();
   }
 
   /// Setup listeners for audio player state changes
@@ -44,9 +50,74 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     });
   }
 
+  /// ✅ NEW: Verify all recordings exist on the server
+  Future<void> _verifyAllRecordingsExist() async {
+    if (_isVerifyingRecordings) return; // Prevent duplicate checks
+    
+    setState(() => _isVerifyingRecordings = true);
+    
+    for (final recording in widget.recordings) {
+      if (!_recordingExistenceCache.containsKey(recording.id)) {
+        await _verifyRecordingExists(recording);
+      }
+    }
+    
+    if (mounted) {
+      setState(() => _isVerifyingRecordings = false);
+    }
+  }
+
+
+  /// ✅ NEW: Check if recording exists (cached)
+  bool _recordingExists(String recordingId) {
+    return _recordingExistenceCache[recordingId] ?? true; // Default to true if not yet verified
+  }
+
+  /// ✅ NEW: Verify if a recording exists (with feedback/logging)
+  Future<bool> _verifyRecordingExists(Recording recording) async {
+    try {
+      final response = await http
+          .head(Uri.parse(recording.url))
+          .timeout(const Duration(seconds: 5));
+
+      final exists = response.statusCode == 200;
+      print(
+          '${exists ? '✅' : '❌'} Recording ${exists ? 'exists' : 'NOT FOUND'} (HTTP ${response.statusCode})');
+      
+      // Update cache
+      if (mounted) {
+        setState(() {
+          _recordingExistenceCache[recording.id] = exists;
+        });
+      }
+      
+      return exists;
+    } catch (e) {
+      print('⚠️ Could not verify recording: $e');
+      // If we can't verify, assume it might still exist
+      return true;
+    }
+  }
+
   /// Play a recording from URL (auto-plays and auto-stops when done)
   Future<void> _playRecording(Recording recording) async {
     try {
+      // ✅ NEW: Verify recording exists first
+      print('🎵 Attempting to play recording: ${recording.id}');
+      final exists = await _verifyRecordingExists(recording);
+
+      if (!exists) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                '❌ Recording file not found on server. It may have been deleted.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
+          ),
+        );
+        return;
+      }
+
       // Stop current playback if any
       if (_currentPlayingRecordingId != null) {
         await _audioPlayer.stop();
@@ -157,6 +228,12 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     final grouped = <String, List<Recording>>{};
 
     for (final recording in widget.recordings) {
+      // ✅ NEW: Skip recordings that are confirmed to not exist
+      if (_recordingExistenceCache.containsKey(recording.id) &&
+          _recordingExistenceCache[recording.id] == false) {
+        continue;
+      }
+
       try {
         final dateTime = DateTime.parse(recording.recordedAt);
         final dateString = _getDateString(dateTime);

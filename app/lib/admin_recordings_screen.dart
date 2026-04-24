@@ -52,7 +52,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
       }
 
       final url =
-          '$_backendUrl/recordings/session/${widget.sessionId}';
+          '$_backendUrl/recordings/session/${widget.sessionId}?verify=true';
       print('🌐 Fetching all session recordings from: $url');
 
       final response = await http.get(

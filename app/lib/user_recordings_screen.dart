@@ -47,7 +47,8 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
 
       // ✅ FIXED: Use session-based endpoint instead of user-based
       // This works because recordings are tied to sessions, not MongoDB user IDs
-      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}';
+      // ✅ NEW: Enable verification to filter out non-existent recordings
+      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&verify=true';
       print('🌐 Fetching recordings from: $url');
 
       // Fetch recordings
@@ -64,12 +65,26 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
             ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
             .toList() ?? [];
 
+        final verified = data['verified'] ?? recordings.length;
+        print('✅ Loaded $verified verified recordings out of ${data['total']}');
+
         setState(() {
           _recordings = recordings;
           _isLoading = false;
         });
 
-        print('✅ Loaded ${recordings.length} recordings');
+        // Show a subtle message if some recordings were removed
+        if (verified < (data['total'] ?? 0)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '🗑️ Removed ${(data['total'] ?? 0) - verified} orphaned recordings',
+              ),
+              backgroundColor: Colors.orange.shade700,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
       } else {
         setState(() {
           _error = 'Failed to load recordings: ${response.statusCode}';
