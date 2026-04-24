@@ -133,6 +133,8 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             // ── Controls bar ─────────────────────────────────────────────
             CallControlsBar(
               isHost: _ctrl.isHost,
+              isSpeakerOn: _ctrl.isSpeakerOn,
+              onSpeakerTap: _ctrl.toggleSpeakerphone,
               onExitRoom: () async {
                 await _ctrl.leaveChannel();
                 if (mounted) Navigator.pop(context);
@@ -203,7 +205,7 @@ class _StatusLabel extends StatelessWidget {
       return ctrl.isMuted ? 'HOLD TO TALK' : 'SPEAKING - RELEASE TO MUTE';
     }
     if (!ctrl.isHost && !ctrl.isSessionActive) return 'WAITING FOR HOST...';
-    return 'JOINING...';
+    return ctrl.statusMessage.toUpperCase();
   }
 
   Color get _color {

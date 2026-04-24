@@ -4,12 +4,18 @@ import 'package:flutter/material.dart';
 /// Recordings, Exit Room).
 class CallControlsBar extends StatelessWidget {
   final bool isHost;
+  final bool isSpeakerOn;
+  final VoidCallback onSpeakerTap;
+  final VoidCallback? onBluetoothTap;
   final VoidCallback onExitRoom;
   final VoidCallback? onRecordingsTap;
 
   const CallControlsBar({
     super.key,
     required this.isHost,
+    required this.isSpeakerOn,
+    required this.onSpeakerTap,
+    this.onBluetoothTap,
     required this.onExitRoom,
     this.onRecordingsTap,
   });
@@ -28,14 +34,16 @@ class CallControlsBar extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _ControlButton(
-            icon: Icons.volume_up,
+            icon: isSpeakerOn ? Icons.volume_up : Icons.volume_down,
             label: 'Speaker',
-            color: const Color(0xFF00D4FF),
+            color: isSpeakerOn ? const Color(0xFF00FF41) : const Color(0xFF00D4FF),
+            onTap: onSpeakerTap,
           ),
           _ControlButton(
             icon: Icons.bluetooth,
             label: 'Bluetooth',
             color: const Color(0xFF00D4FF),
+            onTap: onBluetoothTap,
           ),
           if (!isHost)
             _ControlButton(

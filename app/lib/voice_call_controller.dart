@@ -44,6 +44,7 @@ class VoiceCallController extends ChangeNotifier {
   String username = '';
   Map<int, String> usernames = {};
   bool isSessionActive = false;
+  bool isSpeakerOn = false; // ✅ NEW: Track speakerphone status
   bool isHost = false;
   int? hostUid;
 
@@ -80,8 +81,14 @@ class VoiceCallController extends ChangeNotifier {
         notifyListeners();
       },
     );
-    await _loadUserInfo();
-    await _initializeAgora();
+    try {
+      await _loadUserInfo();
+      await _initializeAgora();
+    } catch (e) {
+      statusMessage = 'Initialization failed';
+      onError?.call('Init error: $e');
+      notifyListeners();
+    }
   }
 
   // ─── User info ────────────────────────────────────────────────────────────
@@ -104,7 +111,12 @@ class VoiceCallController extends ChangeNotifier {
   // ─── Agora ────────────────────────────────────────────────────────────────
 
   Future<void> _initializeAgora() async {
+    statusMessage = 'Requesting mic permission...';
+    notifyListeners();
     await _requestMicrophonePermission();
+
+    statusMessage = 'Initializing Agora...';
+    notifyListeners();
     agoraEngine = createAgoraRtcEngine();
     await agoraEngine.initialize(RtcEngineContext(appId: agoraAppId));
     await agoraEngine.enableAudio();
@@ -113,8 +125,14 @@ class VoiceCallController extends ChangeNotifier {
       smooth: 3,
       reportVad: true,
     );
+    
+    // ✅ NEW: Default to earpiece (receiver) for normal call sound
+    await agoraEngine.setDefaultAudioRouteToSpeakerphone(false);
+    await agoraEngine.setEnableSpeakerphone(false);
+    isSpeakerOn = false;
+    
     _setupEventHandlers();
-    statusMessage = 'Ready to join call';
+    statusMessage = 'Ready to join';
     notifyListeners();
     await _autoJoinCall();
   }
@@ -311,8 +329,13 @@ class VoiceCallController extends ChangeNotifier {
     notifyListeners();
 
     try {
+      statusMessage = 'Fetching token...';
+      notifyListeners();
       await _fetchAgoraToken();
       if (agoraToken == null) throw Exception('Token is null');
+
+      statusMessage = 'Joining channel...';
+      notifyListeners();
 
       await agoraEngine.joinChannel(
         token: agoraToken!,
@@ -372,6 +395,17 @@ class VoiceCallController extends ChangeNotifier {
 
   Future<void> toggleMute() async =>
       isMuted ? await unmute() : await mute();
+
+  /// Toggles between speakerphone and earpiece
+  Future<void> toggleSpeakerphone() async {
+    try {
+      isSpeakerOn = !isSpeakerOn;
+      await agoraEngine.setEnableSpeakerphone(isSpeakerOn);
+      notifyListeners();
+    } catch (e) {
+      onError?.call('Failed to toggle speaker: $e');
+    }
+  }
 
   // ─── Selective audio subscription ─────────────────────────────────────────
 
