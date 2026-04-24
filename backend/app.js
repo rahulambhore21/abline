@@ -2014,326 +2014,59 @@ app.get('/recordings', authMiddleware, async (req, res) => {
 
 /**
  * ✅ NEW: POST /recordings/save
- * Save audio file uploaded from Flutter app (hold-to-speak recording)
- * Multipart FormData:
- *   - audioFile: binary audio file
- *   - userId: number
- *   - sessionId: string
- *   - durationMs: number
+ * Save audio file uploaded from Flutter app
  */
 app.post('/recordings/save', async (req, res) => {
   try {
-    console.log('\n' + '='.repeat(70));
-    console.log('📥 RECORDING UPLOAD REQUEST RECEIVED');
-    console.log('='.repeat(70));
-    console.log('Timestamp:', new Date().toISOString());
-    console.log('Request Headers:', {
-      contentType: req.headers['content-type'],
-      contentLength: req.headers['content-length'],
-      userAgent: req.headers['user-agent'],
-    });
-    console.log('Body Fields:', req.body);
-    console.log('Available Files:', req.files ? Object.keys(req.files) : 'NONE');
-
     const { userId, sessionId, durationMs, username } = req.body;
     const audioFile = req.files?.audioFile;
 
-    // Detailed validation logging
-    // ✅ FIXED: Use proper null/undefined checks (userId can be 0)
-    if (userId === null || userId === undefined) {
-      console.error('❌ VALIDATION FAILED: Missing userId');
-      console.error('   Received body:', req.body);
-      return res.status(400).json({
-        error: 'Missing required fields: userId',
-        received: { userId, sessionId, hasFile: !!audioFile },
-      });
-    }
-    if (!sessionId) {
-      console.error('❌ VALIDATION FAILED: Missing sessionId');
-      console.error('   Received body:', req.body);
-      return res.status(400).json({
-        error: 'Missing required fields: sessionId',
-        received: { userId, sessionId, hasFile: !!audioFile },
-      });
-    }
-    if (!audioFile) {
-      console.error('❌ VALIDATION FAILED: Missing audioFile');
-      console.error('   Available files:', req.files ? Object.keys(req.files) : 'NONE');
-      console.error('   Expected field name: "audioFile"');
-      console.error('   Full files object:', req.files);
-      return res.status(400).json({
-        error: 'Missing required fields: audioFile',
-        received: { userId, sessionId, hasFile: !!audioFile },
-        availableFiles: req.files ? Object.keys(req.files) : [],
-        hint: 'Make sure to send file as multipart with field name "audioFile"',
-      });
+    if (userId === null || userId === undefined || !sessionId || !audioFile) {
+      return res.status(400).json({ error: 'Missing required fields' });
     }
 
-    console.log('✅ All validations passed');
-    console.log('📋 Recording Details:');
-    console.log(`   - User ID: ${userId}`);
-    console.log(`   - Session ID: ${sessionId}`);
-    console.log(`   - Duration: ${durationMs}ms`);
-    console.log(`   - File Name: ${audioFile.name}`);
-    console.log(`   - File Size: ${audioFile.size} bytes`);
-
-    // Generate unique filename
     const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const filename = `${recordingId}.m4a`;
-
-    // For now, store locally in a recordings folder (in production, use S3)
     const recordingsDir = path.join(__dirname, 'recordings');
+    
     if (!fs.existsSync(recordingsDir)) {
-      console.log(`📁 Creating recordings directory: ${recordingsDir}`);
       fs.mkdirSync(recordingsDir, { recursive: true });
-      console.log(`✅ Directory created successfully`);
-    } else {
-      console.log(`📁 Recordings directory already exists: ${recordingsDir}`);
     }
 
     const filePath = path.join(recordingsDir, filename);
-    console.log(`\n💾 FILE SAVE PROCESS`);
-    console.log(`   - Recording ID: ${recordingId}`);
-    console.log(`   - Target filename: ${filename}`);
-    console.log(`   - Full path: ${filePath}`);
-
-    // Save file locally
-    console.log(`   📝 Writing file to disk...`);
     await audioFile.mv(filePath);
-    console.log(`   ✅ File write completed`);
 
-    // Verify file exists
-    if (!fs.existsSync(filePath)) {
-      console.error(`❌ CRITICAL: File was not saved to disk!`);
-      console.error(`   Expected path: ${filePath}`);
-      throw new Error('File was not saved to disk');
-    }
-    const fileSize = fs.statSync(filePath).size;
-    console.log(`   ✅ File verified on disk - Size: ${fileSize} bytes`);
-
-    // Store recording metadata in MongoDB
     const recording = {
       recordingId,
       userId: Number(userId),
-      username: username || 'Unknown', // ✅ NEW: Save username for easy segregation
+      username: username || 'Unknown',
       sessionId,
       filename,
-      url: `${PUBLIC_URL}/recordings/download/${recordingId}`, // ✅ FIXED: Use PUBLIC_URL
+      url: `${PUBLIC_URL}/recordings/download/${recordingId}`,
       recordedAt: new Date(),
       durationMs: Number(durationMs) || 0,
     };
 
-    console.log(`\n🗄️ DATABASE SAVE PROCESS`);
-    console.log(`   Recording metadata:`);
-    console.log(JSON.stringify(recording, null, 2));
-
-    try {
-      // ✅ NEW: Save to MongoDB for persistence across server restarts
-      if (mongoReady) {
-        console.log(`   📡 MongoDB is ready - attempting to save...`);
-        const saved = await RecordingModel.create(recording);
-        console.log(`   ✅ Recording saved to MongoDB`);
-        console.log(`   📍 MongoDB ID: ${saved._id}`);
-      } else {
-        console.log(`   ⚠️ MongoDB not ready - using in-memory storage`);
-        // Fallback: Store in memory if MongoDB is not ready
-        recordingsStorage.set(recordingId, recording);
-        saveRecordingsToDisk();
-        console.log(`   ✅ Recording saved to memory + disk backup`);
-      }
-    } catch (dbError) {
-      console.error(`   ⚠️ Error saving to MongoDB: ${dbError.message}`);
-      console.error(`   📋 Error details:`, dbError);
-      console.log(`   🔄 Falling back to in-memory storage...`);
+    if (mongoReady) {
+      await RecordingModel.create(recording);
+      console.log(`✅ Recording saved to MongoDB: ${recordingId} for ${username || userId}`);
+    } else {
       recordingsStorage.set(recordingId, recording);
       saveRecordingsToDisk();
-      console.log(`   ✅ Recording saved to memory + disk backup (MongoDB fallback)`);
+      console.log(`⚠️ MongoDB not ready - saved ${recordingId} to memory`);
     }
 
-    // Also keep in-memory cache for fast access
     recordingsStorage.set(recordingId, recording);
-    cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
-
-    console.log(`\n✅ RECORDING SAVED SUCCESSFULLY`);
-    console.log(`   User: ${userId}, Session: ${sessionId}`);
-    console.log(`   Duration: ${durationMs}ms, File: ${filename}`);
-    console.log(`   Download URL: ${recording.url}`);
-    console.log('='.repeat(70) + '\n');
+    cleanupOldRecordings();
 
     res.status(201).json({
       success: true,
       recordingId,
       url: recording.url,
-      message: `Recording saved for user ${userId}`,
     });
   } catch (error) {
-    console.error('\n' + '='.repeat(70));
-    console.error('❌ ERROR SAVING RECORDING');
-    console.error('='.repeat(70));
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    console.error('='.repeat(70) + '\n');
-    res.status(500).json({
-      error: 'Failed to save recording',
-      message: error.message,
-    });
-  }
-});
-
-/**
- * ✅ NEW: GET /recordings/user/:userId
- * Get all recordings for a specific user in a session
- * Query params: ?sessionId=test_room
- *
- * ✅ FIXED: Now reads from MongoDB to survive server restarts
- */
-app.get('/recordings/user/:userId', async (req, res) => {
-  try {
-    const userIdParam = req.params.userId;
-    const { sessionId } = req.query;
-
-    // ✅ FIXED: Validate userId is a valid number
-    const userId = Number(userIdParam);
-    if (isNaN(userId)) {
-      console.warn(`⚠️  Invalid userId: ${userIdParam} (NaN)`);
-      return res.json({
-        total: 0,
-        recordings: [],
-        warning: `Invalid user ID: ${userIdParam}`,
-      });
-    }
-
-    console.log(`📋 Fetching recordings for userId: ${userId}, sessionId: ${sessionId}`);
-
-    let recordings = [];
-
-    if (mongoReady) {
-      // ✅ NEW: Query from MongoDB for persistent storage
-      const filter = { userId };
-      if (sessionId) {
-        filter.sessionId = sessionId;
-      }
-
-      const dbRecordings = await RecordingModel.find(filter)
-        .sort({ recordedAt: -1 })
-        .lean();
-
-      recordings = dbRecordings.map(r => ({
-        id: r.recordingId,
-        userId: r.userId,
-        sessionId: r.sessionId,
-        filename: r.filename,
-        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
-        recordedAt: r.recordedAt,
-        durationMs: r.durationMs,
-      }));
-
-      console.log(`✅ Found ${recordings.length} recordings from MongoDB`);
-    } else {
-      // Fallback: Use in-memory storage if MongoDB is not ready
-      let storageRecordings = Array.from(recordingsStorage.values());
-      storageRecordings = storageRecordings.filter(r => r.userId === userId);
-      if (sessionId) {
-        storageRecordings = storageRecordings.filter(r => r.sessionId === sessionId);
-      }
-      storageRecordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
-
-      recordings = storageRecordings.map(r => ({
-        id: r.recordingId,
-        userId: r.userId,
-        sessionId: r.sessionId,
-        filename: r.filename,
-        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
-        recordedAt: r.recordedAt,
-        durationMs: r.durationMs,
-      }));
-
-      console.log(`⚠️  Using in-memory storage - Found ${recordings.length} recordings`);
-    }
-
-    res.json({
-      total: recordings.length,
-      recordings,
-    });
-  } catch (error) {
-    console.error('Error fetching user recordings:', error);
-    res.status(500).json({
-      error: 'Failed to fetch user recordings',
-    });
-  }
-});
-
-/**
- * ✅ NEW: GET /recordings/sessions
- * List all unique sessions that have recordings (admin view)
- * Returns sessionId, recordingCount, and latestRecordingDate
- */
-app.get('/recordings/sessions', authMiddleware, allowRole('host'), async (req, res) => {
-  try {
-    if (mongoReady) {
-      // Use aggregation to get unique sessions and their counts
-      const sessions = await RecordingModel.aggregate([
-        {
-          $group: {
-            _id: '$sessionId',
-            recordingCount: { $sum: 1 },
-            latestRecordingDate: { $max: '$recordedAt' },
-            userIds: { $addToSet: '$userId' }
-          }
-        },
-        {
-          $project: {
-            sessionId: '$_id',
-            recordingCount: 1,
-            latestRecordingDate: 1,
-            userCount: { $size: '$userIds' },
-            _id: 0
-          }
-        },
-        { $sort: { latestRecordingDate: -1 } }
-      ]);
-
-      return res.json({
-        total: sessions.length,
-        sessions
-      });
-    } else {
-      // Fallback: Use in-memory storage
-      const sessionsMap = new Map();
-      recordingsStorage.forEach(r => {
-        if (!sessionsMap.has(r.sessionId)) {
-          sessionsMap.set(r.sessionId, {
-            sessionId: r.sessionId,
-            recordingCount: 0,
-            latestRecordingDate: r.recordedAt,
-            users: new Set()
-          });
-        }
-        const s = sessionsMap.get(r.sessionId);
-        s.recordingCount++;
-        s.users.add(r.userId);
-        if (new Date(r.recordedAt) > new Date(s.latestRecordingDate)) {
-          s.latestRecordingDate = r.recordedAt;
-        }
-      });
-
-      const sessions = Array.from(sessionsMap.values()).map(s => ({
-        sessionId: s.sessionId,
-        recordingCount: s.recordingCount,
-        latestRecordingDate: s.latestRecordingDate,
-        userCount: s.users.size
-      }));
-
-      sessions.sort((a, b) => new Date(b.latestRecordingDate) - new Date(a.latestRecordingDate));
-
-      return res.json({
-        total: sessions.length,
-        sessions
-      });
-    }
-  } catch (error) {
-    console.error('Error fetching sessions list:', error);
-    res.status(500).json({ error: 'Failed to fetch sessions list' });
+    console.error('❌ Error saving recording:', error.message);
+    res.status(500).json({ error: 'Failed to save recording' });
   }
 });
 

@@ -5,7 +5,6 @@ import 'auth_service.dart';
 import 'app_config.dart';
 import 'voice_call_screen.dart';
 import 'admin_recordings_screen.dart';
-import 'admin_sessions_screen.dart';
 
 /// Admin dashboard showing overview statistics
 class AdminDashboard extends StatefulWidget {
@@ -702,7 +701,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const AdminSessionsScreen(),
+                                builder: (context) => const AdminRecordingsScreen(
+                                  sessionId: 'test_room',
+                                ),
                               ),
                             );
                           },
