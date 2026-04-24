@@ -85,9 +85,15 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   }
 
   Widget _buildScaffold(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF2a2a2a),
-      body: SafeArea(
+    return PopScope(
+      canPop: false, // Handle pop manually to ensure leaveChannel is called
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleExit(context);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFF2a2a2a),
+        body: SafeArea(
         child: Column(
           children: [
             // ── Top bar ──────────────────────────────────────────────────
@@ -97,7 +103,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               child: Row(
                 children: [
                   GestureDetector(
-                    onTap: () => Navigator.pop(context),
+                    onTap: () => _handleExit(context),
                     child: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
@@ -122,7 +128,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
             ),
             const SizedBox(height: 24),
 
-            // ── Status banners ───────────────────────────────────────────
+            // ─── Status banners ───────────────────────────────────────────
             CallStatusBanners(
               isRecording: _ctrl.isRecording,
               isHost: _ctrl.isHost,
@@ -130,15 +136,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               isSessionActive: _ctrl.isSessionActive,
             ),
 
-            // ── Controls bar ─────────────────────────────────────────────
+            // ─── Controls bar ─────────────────────────────────────────────
             CallControlsBar(
               isHost: _ctrl.isHost,
               isSpeakerOn: _ctrl.isSpeakerOn,
               onSpeakerTap: _ctrl.toggleSpeakerphone,
-              onExitRoom: () async {
-                await _ctrl.leaveChannel();
-                if (mounted) Navigator.pop(context);
-              },
+              onExitRoom: () => _handleExit(context),
               onRecordingsTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -188,6 +191,44 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
         ),
       ),
     );
+  }
+
+  Future<void> _handleExit(BuildContext context) async {
+    // Show a small overlay to prevent interaction while leaving
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              'Leaving room...',
+              style: TextStyle(
+                color: Colors.white,
+                decoration: TextDecoration.none,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    try {
+      await _ctrl.leaveChannel();
+    } catch (e) {
+      print('Error during leave: $e');
+    } finally {
+      if (mounted) {
+        // Pop the loading dialog
+        Navigator.of(context, rootNavigator: true).pop();
+        // Pop the VoiceCallScreen back to the dashboard/home
+        Navigator.of(context).pop();
+      }
+    }
   }
 }
 

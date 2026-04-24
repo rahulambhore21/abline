@@ -70,8 +70,8 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
       return;
     }
 
-    if (_passwordController.text.length < 6) {
-      _showSnackBar('Password must be at least 6 characters', isError: true);
+    if (_passwordController.text.length < 4) {
+      _showSnackBar('Password must be at least 4 characters', isError: true);
       return;
     }
 
@@ -133,7 +133,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                 controller: _passwordController,
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  hintText: 'Enter password (min 6 chars)',
+                  hintText: 'Enter password (min 4 chars)',
                   border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.lock),
                 ),

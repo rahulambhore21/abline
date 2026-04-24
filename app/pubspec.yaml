@@ -56,6 +56,9 @@ dependencies:
   # Local storage for JWT token and user preferences
   shared_preferences: ^2.2.0
 
+  # Audio session management for speaker/earpiece routing
+  audio_session: ^0.1.18
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

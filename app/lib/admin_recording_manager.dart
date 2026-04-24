@@ -412,7 +412,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'User: $shortUserId',
+                                      'User: ${recordings.isNotEmpty ? (recordings.first.username ?? shortUserId) : shortUserId}',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,

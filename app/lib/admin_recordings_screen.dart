@@ -4,7 +4,7 @@ import 'dart:convert';
 import 'app_config.dart';
 import 'auth_service.dart';
 import 'recording.dart';
-import 'recording_list_widget.dart';
+import 'admin_user_recordings_screen.dart'; // ✅ NEW
 
 /// ✅ NEW: Admin screen to view all users' recordings for a session
 class AdminRecordingsScreen extends StatefulWidget {
@@ -193,58 +193,71 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                               final totalDuration = recordings.fold<int>(
                                   0, (sum, rec) => sum + (rec.durationMs ?? 0));
 
-                              return Container(
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF3a3a3a),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.white10),
-                                ),
-                                child: Theme(
-                                  data: Theme.of(context).copyWith(
-                                    dividerColor: Colors.transparent,
+                              return InkWell(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) =>
+                                        AdminUserRecordingsScreen(
+                                      username: username,
+                                      recordings: recordings,
+                                      backendUrl: _backendUrl,
+                                      onVerificationComplete: (verifiedList) {
+                                        if (verifiedList.length !=
+                                            recordings.length) {
+                                          setState(() {
+                                            _recordingsByUser[username] =
+                                                verifiedList;
+                                          });
+                                        }
+                                      },
+                                    ),
                                   ),
-                                  child: ExpansionTile(
-                                    leading: const CircleAvatar(
-                                      backgroundColor: Color(0xFF1a73e8),
-                                      child: Icon(Icons.person, color: Colors.white),
-                                    ),
-                                    title: Text(
-                                      username, // ✅ Display username
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 18,
-                                      ),
-                                    ),
-                                    subtitle: Text(
-                                      '${recordings.length} clip${recordings.length != 1 ? 's' : ''} • ${_formatDuration(totalDuration)}',
-                                      style: TextStyle(
-                                        color: Colors.white.withOpacity(0.6),
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                    iconColor: Colors.white70,
-                                    collapsedIconColor: Colors.white30,
+                                ),
+                                borderRadius: BorderRadius.circular(12),
+                                child: Container(
+                                  padding: const EdgeInsets.all(16),
+                                  margin: const EdgeInsets.only(bottom: 12),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF3a3a3a),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: Colors.white10),
+                                  ),
+                                  child: Row(
                                     children: [
-                                      Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 16, vertical: 8),
-                                        child: RecordingListWidget(
-                                          recordings: recordings,
-                                          backendUrl: _backendUrl,
-                                          onVerificationComplete:
-                                              (verifiedList) {
-                                            if (verifiedList.length !=
-                                                recordings.length) {
-                                              setState(() {
-                                                _recordingsByUser[username] =
-                                                    verifiedList;
-                                              });
-                                            }
-                                          },
+                                      const CircleAvatar(
+                                        backgroundColor: Color(0xFF1a73e8),
+                                        child: Icon(Icons.person,
+                                            color: Colors.white),
+                                      ),
+                                      const SizedBox(width: 16),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              username,
+                                              style: const TextStyle(
+                                                color: Colors.white,
+                                                fontWeight: FontWeight.bold,
+                                                fontSize: 18,
+                                              ),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              '${recordings.length} clip${recordings.length != 1 ? 's' : ''} • ${_formatDuration(totalDuration)}',
+                                              style: TextStyle(
+                                                color: Colors.white
+                                                    .withOpacity(0.6),
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
                                         ),
                                       ),
+                                      const Icon(Icons.chevron_right,
+                                          color: Colors.white30),
                                     ],
                                   ),
                                 ),

@@ -85,7 +85,7 @@ class VoiceCallController extends ChangeNotifier {
       await _loadUserInfo();
       await _initializeAgora();
     } catch (e) {
-      statusMessage = 'Initialization failed';
+      statusMessage = 'Init failed: $e';
       onError?.call('Init error: $e');
       notifyListeners();
     }
@@ -126,10 +126,15 @@ class VoiceCallController extends ChangeNotifier {
       reportVad: true,
     );
     
+    
     // ✅ NEW: Default to earpiece (receiver) for normal call sound
-    await agoraEngine.setDefaultAudioRouteToSpeakerphone(false);
-    await agoraEngine.setEnableSpeakerphone(false);
-    isSpeakerOn = false;
+    try {
+      await agoraEngine.setDefaultAudioRouteToSpeakerphone(false);
+      await agoraEngine.setEnableSpeakerphone(false);
+      isSpeakerOn = false;
+    } catch (e) {
+      print('⚠️ Audio routing setup warning: $e');
+    }
     
     _setupEventHandlers();
     statusMessage = 'Ready to join';
@@ -473,6 +478,21 @@ class VoiceCallController extends ChangeNotifier {
             await _applySelectiveAudioSubscription(rUid);
           }
         }
+      } else if (response.statusCode == 409) {
+        // ✅ NEW: Handle duplicate username error
+        final errorData = jsonDecode(response.body);
+        final errorMsg = errorData['message'] ?? 'Username already active in this channel';
+        
+        // Leave the channel since we are not authorized to be here with this name
+        await agoraEngine.leaveChannel();
+        isConnected = false;
+        isJoining = false;
+        statusMessage = 'Name already active';
+        notifyListeners();
+        
+        onError?.call(errorMsg);
+      } else {
+        print('⚠️ Failed to register user in session: ${response.statusCode}');
       }
     } catch (_) {}
   }

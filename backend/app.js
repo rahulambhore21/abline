@@ -102,13 +102,13 @@ const UserSchema = new mongoose.Schema(
       required: [true, 'Username is required'],
       unique: true,
       trim: true,
-      minlength: [3, 'Username must be at least 3 characters'],
+      minlength: [2, 'Username must be at least 2 characters'],
       index: true, // ✅ OPTIMIZATION: Index for faster lookups
     },
     password: {
       type: String,
       required: [true, 'Password is required'],
-      minlength: [6, 'Password must be at least 6 characters'],
+      minlength: [4, 'Password must be at least 4 characters'],
       select: false, // Don't return password in queries
     },
     role: {
@@ -1625,6 +1625,22 @@ app.post('/session/:id/users/add', (req, res) => {
 
     const session = activeSessions.get(sessionId);
 
+    // ✅ NEW: Prevent duplicate usernames in the same channel
+    let existingUserWithSameName = null;
+    for (const [uid, uData] of session.users.entries()) {
+      if (uData.username === username && uid !== userId) {
+        existingUserWithSameName = uData;
+        break;
+      }
+    }
+
+    if (existingUserWithSameName) {
+      return res.status(409).json({
+        error: 'Duplicate username',
+        message: `The username "${username}" is already active in this channel.`,
+      });
+    }
+
     // ✅ Track host UID if this user is a host
     if (role === 'host') {
       session.hostUid = userId;
@@ -1876,7 +1892,9 @@ function recordingExists(recording) {
 
   // 1. If it has a cloud URL (S3), assume it exists
   const url = recording.url || '';
-  if (url.includes('s3') || url.includes('amazonaws') || url.startsWith('http')) {
+  const isInternalUrl = url.includes(PUBLIC_URL) || url.includes('/recordings/download/');
+  
+  if (!isInternalUrl && (url.includes('s3') || url.includes('amazonaws') || url.startsWith('http'))) {
     // We assume cloud files exist unless we want to do a HEAD request (slow)
     return true;
   }
@@ -2036,6 +2054,7 @@ app.post('/recordings/save', async (req, res) => {
     const filePath = path.join(recordingsDir, filename);
     await audioFile.mv(filePath);
 
+    // Create recording metadata object
     const recording = {
       recordingId,
       userId: Number(userId),
@@ -2047,22 +2066,31 @@ app.post('/recordings/save', async (req, res) => {
       durationMs: Number(durationMs) || 0,
     };
 
+    // 1. Always save to in-memory storage for immediate access
+    recordingsStorage.set(recordingId, recording);
+    
+    // 2. Always save to local disk metadata file as a backup
+    saveRecordingsToDisk();
+
+    // 3. Save to MongoDB for long-term persistence if available
     if (mongoReady) {
-      await RecordingModel.create(recording);
-      console.log(`✅ Recording saved to MongoDB: ${recordingId} for ${username || userId}`);
+      try {
+        await RecordingModel.create(recording);
+        console.log(`✅ Recording persisted to MongoDB: ${recordingId}`);
+      } catch (dbErr) {
+        console.error(`⚠️ Failed to save to MongoDB (metadata still on disk): ${dbErr.message}`);
+      }
     } else {
-      recordingsStorage.set(recordingId, recording);
-      saveRecordingsToDisk();
-      console.log(`⚠️ MongoDB not ready - saved ${recordingId} to memory`);
+      console.log(`⚠️ MongoDB not ready - recording ${recordingId} saved to local disk backup only`);
     }
 
-    recordingsStorage.set(recordingId, recording);
     cleanupOldRecordings();
 
     res.status(201).json({
       success: true,
       recordingId,
       url: recording.url,
+      recordedAt: recording.recordedAt,
     });
   } catch (error) {
     console.error('❌ Error saving recording:', error.message);

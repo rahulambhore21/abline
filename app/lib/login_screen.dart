@@ -76,8 +76,8 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    if (_passwordController.text.length < 6) {
-      setState(() => _errorMessage = 'Password must be at least 6 characters');
+    if (_passwordController.text.length < 4) {
+      setState(() => _errorMessage = 'Password must be at least 4 characters');
       return;
     }
 

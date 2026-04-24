@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'recording.dart';
 import 'auth_service.dart';
 import 'app_config.dart';
+import 'package:audio_session/audio_session.dart'; // ✅ NEW
 
 class RecordingListWidget extends StatefulWidget {
   final List<Recording> recordings;
@@ -112,6 +113,21 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
   /// Play a recording from URL (auto-plays and auto-stops when done)
   Future<void> _playRecording(Recording recording) async {
     try {
+      // ✅ NEW: Force audio to Speaker mode
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
+        avAudioSessionMode: AVAudioSessionMode.videoChat, // VideoChat mode often forces speaker output
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.music,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: true,
+      ));
+      await session.setActive(true);
+
       // ✅ NEW: Verify recording exists first
       print('🎵 Attempting to play recording: ${recording.id}');
       final exists = await _verifyRecordingExists(recording);
