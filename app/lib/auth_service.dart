@@ -1,5 +1,6 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// AuthService handles JWT token management, login, registration, and API calls
@@ -155,10 +156,78 @@ class AuthService {
     return _cachedUsername;
   }
 
-  /// Check if user is authenticated
+  /// Check if user is authenticated AND the stored JWT has not expired.
+  ///
+  /// Decodes the base64 payload locally (no network call) to read `exp`.
+  /// If the token is expired it is automatically cleared from storage so
+  /// the user is redirected to login on the next app start.
   Future<bool> isAuthenticated() async {
     final token = await getToken();
-    return token != null && token.isNotEmpty;
+    if (token == null || token.isEmpty) return false;
+
+    if (isTokenExpired(token)) {
+      // Silently clear stale credentials so the user sees the login screen.
+      await logout();
+      return false;
+    }
+
+    return true;
+  }
+
+  /// Returns true when [token] is past its `exp` timestamp.
+  ///
+  /// Falls back to `false` (not expired) when the token cannot be parsed,
+  /// which keeps the app working if the backend ever issues tokens without `exp`.
+  static bool isTokenExpired(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return true;
+
+      // JWT payload is base64url-encoded (no padding).
+      String payload = parts[1];
+      // Add padding so base64 decode works.
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+
+      final Uint8List decoded = base64Url.decode(payload);
+      final Map<String, dynamic> data =
+          jsonDecode(utf8.decode(decoded)) as Map<String, dynamic>;
+
+      final exp = data['exp'];
+      if (exp == null) return false; // No expiry claim — treat as valid.
+
+      final expiry =
+          DateTime.fromMillisecondsSinceEpoch((exp as int) * 1000, isUtc: true);
+      return DateTime.now().toUtc().isAfter(expiry);
+    } catch (_) {
+      return true; // Malformed token — treat as expired.
+    }
+  }
+
+  /// Returns the expiry [DateTime] of [token], or null if it cannot be parsed.
+  static DateTime? getTokenExpiry(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length != 3) return null;
+
+      String payload = parts[1];
+      while (payload.length % 4 != 0) {
+        payload += '=';
+      }
+
+      final Uint8List decoded = base64Url.decode(payload);
+      final Map<String, dynamic> data =
+          jsonDecode(utf8.decode(decoded)) as Map<String, dynamic>;
+
+      final exp = data['exp'];
+      if (exp == null) return null;
+
+      return DateTime.fromMillisecondsSinceEpoch((exp as int) * 1000,
+          isUtc: true);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// Check if user is host

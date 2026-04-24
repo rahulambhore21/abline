@@ -988,6 +988,33 @@ app.get('/health', (req, res) => {
 });
 
 /**
+ * GET /host
+ * Returns the host's public username (no auth required)
+ * Used by the user home screen to display the host's name
+ *
+ * Response:
+ *   { username: string } or { username: null } when no host exists
+ */
+app.get('/host', async (req, res) => {
+  try {
+    if (!mongoReady) {
+      // MongoDB not connected — return a friendly fallback
+      return res.json({ username: null, message: 'MongoDB not available' });
+    }
+
+    const host = await UserModel.findOne({ role: 'host' }).select('username').lean();
+
+    res.json({
+      username: host ? host.username : null,
+    });
+  } catch (error) {
+    console.error('Error fetching host info:', error);
+    res.status(500).json({ username: null, error: 'Failed to fetch host info' });
+  }
+});
+
+
+/**
  * GET /agora/token
  * Generate Agora RTC token
  * Query params:

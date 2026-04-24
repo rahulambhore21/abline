@@ -18,7 +18,8 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late AuthService _authService;
-  String _hostName = '';
+  String _loggedInUsername = ''; // ✅ Name of the currently signed-in user
+  String _hostName = 'Loading...'; // ✅ Name of the actual host (from backend)
   bool _isHostOnline = false; // ✅ Default to offline
   bool _isLoading = true;
   Timer? _sessionStatusTimer; // ✅ Timer for polling session status
@@ -81,8 +82,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// Load user info
+  /// Load user info — both the logged-in user's details and the actual host name.
   Future<void> _loadUserInfo() async {
+    // 1. Load the current user's credentials from local storage.
     final username = await _authService.getUsername();
     final role = await _authService.getRole();
     final isHost = await _authService.isHost();
@@ -93,11 +95,42 @@ class _HomeScreenState extends State<HomeScreen> {
     print('  - Is Host: $isHost');
 
     setState(() {
-      _hostName = username ?? 'Host';
+      _loggedInUsername = username ?? 'User';
       _isHost = isHost;
-      _isLoading = false;
+      _isLoading = false; // Show UI immediately with what we have.
     });
+
+    // 2. Fetch the actual host's username from the backend (public endpoint).
+    //    This runs after setState so the screen is already visible.
+    _fetchHostName();
   }
+
+  /// Fetch the host's username from GET /host (no auth required).
+  Future<void> _fetchHostName() async {
+    try {
+      final response = await http
+          .get(Uri.parse('${AppConfig.backendBaseUrl}/host'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final name = data['username'] as String?;
+        if (mounted) {
+          setState(() {
+            _hostName = name ?? 'No host registered';
+          });
+        }
+      }
+    } catch (e) {
+      print('Error fetching host name: $e');
+      if (mounted) {
+        setState(() {
+          _hostName = 'Unavailable';
+        });
+      }
+    }
+  }
+
 
   /// Handle logout
   Future<void> _handleLogout() async {
@@ -190,9 +223,9 @@ class _HomeScreenState extends State<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       // Welcome text
-                      const Text(
-                        'Welcome !',
-                        style: TextStyle(
+                      Text(
+                        'Welcome, $_loggedInUsername!',
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
