@@ -116,8 +116,9 @@ const UserSchema = new mongoose.Schema(
       enum: ['host', 'user'],
       default: 'user',
       required: true,
-      index: true, // ✅ OPTIMIZATION: Index for role-based queries
+      index: true,
     },
+    lastKnownUid: { type: Number, index: true }, // ✅ NEW: Link Agora UID to User
   },
   { timestamps: true }
 );
@@ -156,6 +157,7 @@ const RecordingSchema = new mongoose.Schema(
   {
     recordingId: { type: String, required: true, unique: true, index: true },
     userId: { type: Number, required: true, index: true },
+    username: { type: String, index: true }, // ✅ NEW: Store username for easy segregation
     sessionId: { type: String, required: true, index: true },
     filename: { type: String, required: true },
     recordedAt: { type: Date, default: Date.now, index: true },
@@ -1298,18 +1300,59 @@ app.post('/recording/webhook', async (req, res) => {
       console.log(`   - Track Type: ${trackType}`);
       console.log(`   - Channel: ${cname}`);
 
-      // TODO: Store recording metadata in MongoDB
-      // Example schema for RecordingFile:
-      // {
-      //   userId,
-      //   sessionId: cname, // channel name
-      //   filename,
-      //   trackType,
-      //   fileUrl: `https://cdn.agora.io/${filename}`,
-      //   resourceId,
-      //   sid,
-      //   recordedAt: new Date(),
-      // }
+      // ✅ NEW: Store recording metadata in MongoDB
+      if (mongoReady) {
+        try {
+          const recordingId = sid ? `${sid}_${filename}` : `rec_${Date.now()}_${filename}`;
+          
+          // ✅ NEW: Look up username from active session users if possible
+          let cloudUsername = 'Unknown';
+          const activeSession = activeSessions.get(cname);
+          if (activeSession && activeSession.users) {
+            const sessionUser = activeSession.users.get(Number(userId));
+            if (sessionUser && sessionUser.username) {
+              cloudUsername = sessionUser.username;
+              console.log(`👤 Found username for cloud recording: ${cloudUsername}`);
+            }
+          }
+
+          // Construct a best-effort S3 URL
+          // Note: Agora uses the configured bucket. URL format varies by region/vendor.
+          // For now, we'll store the filename and handle redirects in the download endpoint.
+          const bucket = process.env.RECORDING_BUCKET;
+          let s3Url = '';
+          if (bucket) {
+            // Basic S3 URL structure (Vendor 1 = AWS)
+            s3Url = `https://${bucket}.s3.amazonaws.com/${filename}`;
+          }
+
+          const newRecording = new RecordingModel({
+            recordingId,
+            userId: Number(userId) || 0,
+            username: cloudUsername, // ✅ NEW: Save the looked-up username
+            sessionId: cname,
+            filename,
+            recordedAt: new Date(),
+            url: s3Url, // The download endpoint will use this or fallback
+          });
+
+          await newRecording.save();
+          console.log(`💾 Persisted cloud recording metadata to DB: ${recordingId}`);
+          
+          // Also add to in-memory storage for immediate availability
+          recordingsStorage.set(recordingId, {
+            recordingId,
+            userId: Number(userId) || 0,
+            username: cloudUsername, // ✅ NEW
+            sessionId: cname,
+            filename,
+            url: s3Url,
+            recordedAt: new Date(),
+          });
+        } catch (dbErr) {
+          console.error(`⚠️ Failed to persist cloud recording metadata: ${dbErr.message}`);
+        }
+      }
     }
 
     // Acknowledge receipt of webhook
@@ -1598,8 +1641,17 @@ app.post('/session/:id/users/add', (req, res) => {
     res.status(200).json({
       success: true,
       message: `User ${userId} added to session ${sessionId}`,
-      hostUid: session.hostUid, // ✅ Return host UID for client-side filtering
+      hostUid: session.hostUid,
     });
+
+    // ✅ ASYNC: Update User document with lastKnownUid for future lookups
+    if (mongoReady) {
+      UserModel.findOneAndUpdate(
+        { username },
+        { lastKnownUid: userId },
+        { new: true }
+      ).catch(err => console.error('Error updating lastKnownUid:', err));
+    }
   } catch (error) {
     console.error('Error adding user to session:', error);
     res.status(500).json({
@@ -1815,29 +1867,26 @@ app.get('/session/:id/status', (req, res) => {
  *   - userId (optional): Filter by user ID
  */
 /**
- * ✅ OPTIMIZED: Check if a recording file actually exists
- * Used internally to verify recordings before returning them
+ * ✅ IMPROVED: Helper to check if a recording exists (local or cloud)
+ * @param {Object} recording The recording object from DB or memory
+ * @returns {boolean}
  */
-function recordingExists(recordingId) {
-  // Check in-memory cache first
-  if (!recordingsStorage.has(recordingId)) {
-    return false;
-  }
+function recordingExists(recording) {
+  if (!recording) return false;
 
-  const recording = recordingsStorage.get(recordingId);
-
-  // Check if file exists on disk (if it's a local recording)
-  if (recording.filename) {
-    const filePath = path.join(__dirname, 'recordings', recording.filename);
-    return fs.existsSync(filePath);
-  }
-
-  // If it has an S3 URL, assume it exists (we can't verify S3 without credentials)
-  if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
+  // 1. If it has a cloud URL (S3), assume it exists
+  const url = recording.url || '';
+  if (url.includes('s3') || url.includes('amazonaws') || url.startsWith('http')) {
+    // We assume cloud files exist unless we want to do a HEAD request (slow)
     return true;
   }
 
-  return false;
+  // 2. Check local file system
+  const filename = recording.filename;
+  if (!filename) return false;
+
+  const filePath = path.join(__dirname, 'recordings', filename);
+  return fs.existsSync(filePath);
 }
 
 /**
@@ -1848,10 +1897,21 @@ function recordingExists(recordingId) {
  *   - userId (optional): Filter by user ID
  *   - verify (optional): If true, only return recordings that actually exist (default: true)
  */
-app.get('/recordings', async (req, res) => {
+/**
+ * ✅ NEW: GET /recordings
+ * Get recordings for a session, optionally filtered by user
+ * Security: Regular users can ONLY see their own recordings. Hosts can see all.
+ */
+app.get('/recordings', authMiddleware, async (req, res) => {
   try {
     let { sessionId, userId, verify } = req.query;
     const shouldVerify = verify !== 'false'; // Default to true
+
+    // ✅ SECURITY: If not a host, enforce filtering by their own userId
+    if (req.user.role !== 'host') {
+      userId = req.user.userId; // Overwrite or enforce their own ID
+      console.log(`🛡️ Enforcing user-level segregation for: ${req.user.username}`);
+    }
 
     if (mongoReady) {
       // ✅ NEW: Query from MongoDB for persistent storage
@@ -1873,7 +1933,7 @@ app.get('/recordings', async (req, res) => {
         const deleted = [];
 
         for (const r of recordings) {
-          if (recordingExists(r.recordingId)) {
+          if (recordingExists(r)) {
             verified.push(r);
           } else {
             deleted.push(r.recordingId);
@@ -1900,6 +1960,7 @@ app.get('/recordings', async (req, res) => {
         recordings: recordings.map((r) => ({
           id: r.recordingId,
           userId: r.userId,
+          username: r.username || 'Unknown', // ✅ NEW: Include username
           sessionId: r.sessionId,
           filename: r.filename,
           url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
@@ -1920,7 +1981,7 @@ app.get('/recordings', async (req, res) => {
 
     // ✅ OPTIMIZED: Filter out non-existent recordings
     if (shouldVerify) {
-      recordings = recordings.filter((r) => recordingExists(r.recordingId));
+      recordings = recordings.filter((r) => recordingExists(r));
     }
 
     recordings.sort((a, b) => new Date(b.recordedAt) - new Date(a.recordedAt));
@@ -1931,6 +1992,7 @@ app.get('/recordings', async (req, res) => {
       recordings: recordings.map((r) => ({
         id: r.recordingId,
         userId: r.userId,
+        username: r.username || 'Unknown', // ✅ NEW: Include username
         sessionId: r.sessionId,
         filename: r.filename,
         url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
@@ -1969,7 +2031,7 @@ app.post('/recordings/save', async (req, res) => {
     console.log('Body Fields:', req.body);
     console.log('Available Files:', req.files ? Object.keys(req.files) : 'NONE');
 
-    const { userId, sessionId, durationMs } = req.body;
+    const { userId, sessionId, durationMs, username } = req.body;
     const audioFile = req.files?.audioFile;
 
     // Detailed validation logging
@@ -2049,6 +2111,7 @@ app.post('/recordings/save', async (req, res) => {
     const recording = {
       recordingId,
       userId: Number(userId),
+      username: username || 'Unknown', // ✅ NEW: Save username for easy segregation
       sessionId,
       filename,
       url: `${PUBLIC_URL}/recordings/download/${recordingId}`, // ✅ FIXED: Use PUBLIC_URL
@@ -2292,6 +2355,7 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
       recordings = dbRecordings.map(r => ({
         id: r.recordingId,
         userId: r.userId,
+        username: r.username || 'Unknown', // ✅ NEW: Include username
         sessionId: r.sessionId,
         filename: r.filename,
         url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
@@ -2308,6 +2372,7 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
       recordings = storageRecordings.map(r => ({
         id: r.recordingId,
         userId: r.userId,
+        username: r.username || 'Unknown', // ✅ NEW: Include username
         sessionId: r.sessionId,
         filename: r.filename,
         url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
@@ -2322,7 +2387,7 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
       const deleted = [];
 
       for (const r of recordings) {
-        if (recordingExists(r.id)) {
+        if (recordingExists(r)) {
           verified.push(r);
         } else {
           deleted.push(r.id);
@@ -2343,13 +2408,66 @@ app.get('/recordings/session/:sessionId', authMiddleware, allowRole('host'), asy
       recordings = verified;
     }
 
-    // Group by userId
+    // ✅ NEW: Robust username resolution for old recordings
+    const nameMapping = {};
+    const activeSession = activeSessions.get(sessionId);
+
+    // 1. First, identify users with missing usernames and try to resolve from active session
+    recordings.forEach(r => {
+      if (!r.username || r.username === 'Unknown') {
+        if (activeSession && activeSession.users) {
+          const sessionUser = activeSession.users.get(Number(r.userId));
+          if (sessionUser && sessionUser.username) {
+            r.username = sessionUser.username;
+          }
+        }
+      }
+    });
+
+    // 2. For those still missing, try to find ANY recording in DB for that user with a name
+    if (mongoReady) {
+      const missingNameUids = [...new Set(
+        recordings.filter(r => !r.username || r.username === 'Unknown').map(r => r.userId)
+      )];
+
+      for (const uid of missingNameUids) {
+        try {
+          // A. Try to find a recording with this UID that has a name
+          let recWithName = await RecordingModel.findOne({ 
+            userId: uid, 
+            username: { $exists: true, $ne: 'Unknown' } 
+          }).lean();
+          
+          if (recWithName && recWithName.username) {
+            nameMapping[uid] = recWithName.username;
+          } else {
+            // B. Try to find a user with this lastKnownUid
+            const userWithUid = await UserModel.findOne({ lastKnownUid: uid }).lean();
+            if (userWithUid && userWithUid.username) {
+              nameMapping[uid] = userWithUid.username;
+            }
+          }
+        } catch (err) {
+          console.error(`Error resolving username for UID ${uid}:`, err);
+        }
+      }
+
+      // Apply resolved names
+      recordings.forEach(r => {
+        if ((!r.username || r.username === 'Unknown') && nameMapping[r.userId]) {
+          r.username = nameMapping[r.userId];
+        }
+      });
+    }
+
+    // Group by username (instead of userId)
     const byUser = {};
     recordings.forEach(r => {
-      if (!byUser[r.userId]) {
-        byUser[r.userId] = [];
+      const groupKey = r.username || `User ${r.userId}`; // Better fallback than just "Unknown"
+      if (!byUser[groupKey]) {
+        byUser[groupKey] = [];
       }
-      byUser[r.userId].push(r);
+      byUser[groupKey].push(r);
     });
 
     console.log(`📋 Fetched ${recordings.length} recordings for session ${sessionId}`);

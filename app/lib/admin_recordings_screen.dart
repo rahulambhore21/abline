@@ -180,7 +180,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'Total Users: ${_recordingsByUser.length}',
+                              'Total Members: ${_recordingsByUser.length}',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
@@ -188,53 +188,66 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                             ),
                             const SizedBox(height: 16),
                             ..._recordingsByUser.entries.map((entry) {
-                              final userId = entry.key;
+                              final username = entry.key;
                               final recordings = entry.value;
-                              final totalDuration =
-                                  recordings.fold<int>(0, (sum, rec) => sum + (rec.durationMs ?? 0));
+                              final totalDuration = recordings.fold<int>(
+                                  0, (sum, rec) => sum + (rec.durationMs ?? 0));
 
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // User header
-                                  Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue.shade800,
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          'User ID: $userId',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          '${recordings.length} recording${recordings.length != 1 ? 's' : ''} • Total: ${_formatDuration(totalDuration)}',
-                                          style: TextStyle(
-                                            color: Colors.white.withOpacity(0.8),
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 12),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFF3a3a3a),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white10),
+                                ),
+                                child: Theme(
+                                  data: Theme.of(context).copyWith(
+                                    dividerColor: Colors.transparent,
                                   ),
-                                  const SizedBox(height: 12),
-
-                                  // Recordings for this user
-                                  RecordingListWidget(
-                                    recordings: recordings,
-                                    backendUrl: _backendUrl,
+                                  child: ExpansionTile(
+                                    leading: const CircleAvatar(
+                                      backgroundColor: Color(0xFF1a73e8),
+                                      child: Icon(Icons.person, color: Colors.white),
+                                    ),
+                                    title: Text(
+                                      username, // ✅ Display username
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      '${recordings.length} clip${recordings.length != 1 ? 's' : ''} • ${_formatDuration(totalDuration)}',
+                                      style: TextStyle(
+                                        color: Colors.white.withOpacity(0.6),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    iconColor: Colors.white70,
+                                    collapsedIconColor: Colors.white30,
+                                    children: [
+                                      Padding(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 16, vertical: 8),
+                                        child: RecordingListWidget(
+                                          recordings: recordings,
+                                          backendUrl: _backendUrl,
+                                          onVerificationComplete:
+                                              (verifiedList) {
+                                            if (verifiedList.length !=
+                                                recordings.length) {
+                                              setState(() {
+                                                _recordingsByUser[username] =
+                                                    verifiedList;
+                                              });
+                                            }
+                                          },
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(height: 24),
-                                ],
+                                ),
                               );
                             }).toList(),
                           ],

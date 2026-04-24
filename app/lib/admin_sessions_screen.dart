@@ -163,11 +163,12 @@ class _AdminSessionsScreenState extends State<AdminSessionsScreen> {
                       itemCount: _sessions.length,
                       itemBuilder: (context, index) {
                         final session = _sessions[index];
-                        final sessionId = session['sessionId'] ?? 'Unknown';
-                        final recordingCount = session['recordingCount'] ?? 0;
-                        final userCount = session['userCount'] ?? 0;
-                        final latestDate = session['latestRecordingDate'] != null
-                            ? DateTime.parse(session['latestRecordingDate'])
+                        final sessionId = (session['sessionId'] ?? 'Unknown Session').toString();
+                        final recordingCount = int.tryParse(session['recordingCount']?.toString() ?? '0') ?? 0;
+                        final userCount = int.tryParse(session['userCount']?.toString() ?? '0') ?? 0;
+                        final latestDateStr = session['latestRecordingDate']?.toString();
+                        final latestDate = latestDateStr != null
+                            ? DateTime.tryParse(latestDateStr)
                             : null;
 
                         return Card(

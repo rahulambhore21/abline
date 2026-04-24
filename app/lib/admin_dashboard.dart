@@ -641,7 +641,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                             Navigator.push(
                               context,
                               MaterialPageRoute(
-                                builder: (context) => const AdminSessionsScreen(),
+                                builder: (context) => const AdminRecordingsScreen(
+                                  sessionId: 'test_room',
+                                ),
                               ),
                             );
                           },

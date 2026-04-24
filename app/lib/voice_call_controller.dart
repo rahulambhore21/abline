@@ -565,6 +565,7 @@ class VoiceCallController extends ChangeNotifier {
       request.files
           .add(await http.MultipartFile.fromPath('audioFile', audioFile.path));
       request.fields['userId'] = uid.toString();
+      request.fields['username'] = username; // ✅ NEW: Pass username
       request.fields['sessionId'] = channelName;
       request.fields['durationMs'] = durationMs.toString();
 
@@ -578,6 +579,7 @@ class VoiceCallController extends ChangeNotifier {
           id: data['recordingId'] ??
               'rec_${DateTime.now().millisecondsSinceEpoch}',
           userId: uid,
+          username: username, // ✅ NEW
           sessionId: channelName,
           filename: audioFile.path.split('/').last,
           url: data['url'] ?? audioFile.path,

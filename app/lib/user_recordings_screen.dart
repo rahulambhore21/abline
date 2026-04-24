@@ -28,7 +28,6 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
   List<Recording> _recordings = [];
   bool _isLoading = true;
   String _error = '';
-  int _userId = 0;
 
   @override
   void initState() {
@@ -48,12 +47,20 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
       // ✅ FIXED: Use session-based endpoint instead of user-based
       // This works because recordings are tied to sessions, not MongoDB user IDs
       // ✅ NEW: Enable verification to filter out non-existent recordings
-      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&verify=true';
+      // ✅ FIXED: Pass userId to ensure segregation
+      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true';
       print('🌐 Fetching recordings from: $url');
 
+      final token = await _authService.getToken();
+      
       // Fetch recordings
       final response = await http
-          .get(Uri.parse(url))
+          .get(
+            Uri.parse(url),
+            headers: {
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+          )
           .timeout(const Duration(seconds: 10));
 
       print('📡 Response status: ${response.statusCode}');
@@ -199,6 +206,14 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
                                 RecordingListWidget(
                                   recordings: _recordings,
                                   backendUrl: _backendUrl,
+                                  onVerificationComplete: (verifiedList) {
+                                    // ✅ NEW: Update state if verification found missing files
+                                    if (verifiedList.length != _recordings.length) {
+                                      setState(() {
+                                        _recordings = verifiedList;
+                                      });
+                                    }
+                                  },
                                 ),
                               ],
                             ),

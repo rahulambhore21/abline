@@ -8,11 +8,13 @@ import 'app_config.dart';
 class RecordingListWidget extends StatefulWidget {
   final List<Recording> recordings;
   final String backendUrl;
+  final Function(List<Recording>)? onVerificationComplete;
 
   const RecordingListWidget({
     super.key,
     required this.recordings,
     required this.backendUrl,
+    this.onVerificationComplete,
   });
 
   @override
@@ -64,6 +66,14 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     
     if (mounted) {
       setState(() => _isVerifyingRecordings = false);
+      
+      // ✅ NEW: Notify parent if callback provided
+      if (widget.onVerificationComplete != null) {
+        final verifiedRecordings = widget.recordings
+            .where((r) => _recordingExists(r.id))
+            .toList();
+        widget.onVerificationComplete!(verifiedRecordings);
+      }
     }
   }
 

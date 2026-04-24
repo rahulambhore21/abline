@@ -1,6 +1,7 @@
 class Recording {
   final String id;
   final int userId;
+  final String username; // ✅ NEW
   final String sessionId;
   final String filename;
   final String url;
@@ -10,6 +11,7 @@ class Recording {
   Recording({
     required this.id,
     required this.userId,
+    required this.username, // ✅ NEW
     required this.sessionId,
     required this.filename,
     required this.url,
@@ -20,7 +22,10 @@ class Recording {
   factory Recording.fromJson(Map<String, dynamic> json) {
     return Recording(
       id: json['id'] as String,
-      userId: json['userId'] as int,
+      userId: json['userId'] is int
+          ? json['userId'] as int
+          : int.tryParse(json['userId'].toString()) ?? 0,
+      username: json['username']?.toString() ?? 'Unknown', // ✅ NEW
       sessionId: json['sessionId'] as String,
       filename: json['filename'] as String,
       url: json['url'] as String,
