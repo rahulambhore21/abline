@@ -26,7 +26,7 @@ const AGORA_CUSTOMER_SECRET = process.env.AGORA_CUSTOMER_SECRET;
 const MONGODB_URI = process.env.MONGODB_URI;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-production';
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1d';
-const PUBLIC_URL = process.env.PUBLIC_URL || `http://localhost:${PORT}`; // ✅ NEW: Public URL for deployed backend
+const PUBLIC_URL = process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud'; // ✅ NEW: Public URL for deployed backend
 
 // Fail fast when MongoDB is not connected instead of buffering queries for ~10s.
 // This prevents confusing timeouts like: "Operation users.findOne() buffering timed out".
@@ -2547,7 +2547,7 @@ app.post('/test/upload-recording', async (req, res) => {
     console.log(`   - file size: ${dummyAudioBuffer.length} bytes`);
 
     // Use axios to POST multipart form-data
-    const uploadUrl = `http://localhost:${PORT}/recordings/save`;
+    const uploadUrl = `${PUBLIC_URL}/recordings/save`;
 
     // Create form data using a simple approach
     const uploadResponse = await axios({
@@ -2765,6 +2765,71 @@ app.get('/debug/recording/:recordingId', (req, res) => {
 });
 
 /**
+ * 🔧 DEBUG: GET /debug/env
+ * Expose all environment variables for testing
+ * ⚠️ REMOVE THIS ENDPOINT IN PRODUCTION!
+ */
+app.get('/debug/env', (req, res) => {
+  console.log('🔍 Environment Variables Request');
+  
+  const envVars = {
+    NODE_ENV: process.env.NODE_ENV || 'development',
+    PORT: process.env.PORT || '5000',
+    
+    // Agora Configuration
+    AGORA_APP_ID: process.env.AGORA_APP_ID || '❌ NOT SET',
+    AGORA_APP_CERTIFICATE: process.env.AGORA_APP_CERTIFICATE ? '✅ SET (hidden)' : '❌ NOT SET',
+    AGORA_CUSTOMER_ID: process.env.AGORA_CUSTOMER_ID || '❌ NOT SET',
+    AGORA_CUSTOMER_SECRET: process.env.AGORA_CUSTOMER_SECRET ? '✅ SET (hidden)' : '❌ NOT SET',
+    
+    // Database Configuration
+    MONGODB_URI: process.env.MONGODB_URI ? '✅ SET (hidden)' : '❌ NOT SET',
+    mongoReady: mongoReady ? '✅ CONNECTED' : '❌ NOT CONNECTED',
+    
+    // JWT Configuration
+    JWT_SECRET: process.env.JWT_SECRET ? '✅ SET (hidden)' : '❌ NOT SET (using default)',
+    JWT_EXPIRY: process.env.JWT_EXPIRY || '1d',
+    
+    // Deployment Configuration
+    PUBLIC_URL: process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud',
+    
+    // AWS S3 Configuration (if needed)
+    AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID ? '✅ SET (hidden)' : '❌ NOT SET',
+    AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY ? '✅ SET (hidden)' : '❌ NOT SET',
+    AWS_S3_BUCKET: process.env.AWS_S3_BUCKET || '❌ NOT SET',
+    
+    // Server Status
+    uptime: `${Math.floor(process.uptime())} seconds`,
+    timestamp: new Date().toISOString(),
+  };
+
+  res.json({
+    status: 'success',
+    message: '🔧 All Environment Variables (Testing Only)',
+    warning: '⚠️ This endpoint exposes sensitive configuration. Remove before production!',
+    environment: envVars,
+    recordingsStorageSize: recordingsStorage.size,
+    speakingEventsCount: speakingEvents.length,
+  });
+});
+
+/**
+ * 🔧 DEBUG: GET /debug/full-env
+ * Expose ACTUAL environment variable values (VERY SENSITIVE!)
+ * ⚠️ ONLY FOR LOCAL TESTING - REMOVE IMMEDIATELY IN PRODUCTION!
+ */
+app.get('/debug/full-env', (req, res) => {
+  console.log('🔴 SENSITIVE: Full environment variables exposed');
+  
+  res.json({
+    status: 'DANGER: Full Env Exposed',
+    message: '⚠️ ALL ENVIRONMENT VARIABLES EXPOSED - FOR TESTING ONLY',
+    warning: '🚨 DELETE THIS ENDPOINT BEFORE DEPLOYING TO PRODUCTION!',
+    environment: process.env,
+  });
+});
+
+/**
  * 404 handler
  */
 app.use((req, res) => {
@@ -2782,7 +2847,7 @@ connectMongo().finally(() => {
   loadRecordingsFromDisk();
 
   app.listen(PORT, () => {
-    console.log(`✅ Agora RTC Token Server running on http://localhost:${PORT}`);
+    console.log(`✅ Agora RTC Token Server running on ${PUBLIC_URL}`);
     console.log(`📍 Authentication & Authorization:`);
     console.log(`   - POST /auth/register-host (create first host user)`);
     console.log(`   - POST /auth/login (login and get JWT token)`);
@@ -2800,5 +2865,11 @@ connectMongo().finally(() => {
     console.log(`   - GET /recording/active (list active recordings)`);
     console.log(`   - GET /recordings (fetch recordings with filters)`);
     console.log(`   - POST /recordings/add (manually add recording)`);
+    console.log(`\n🔧 DEBUG ENDPOINTS (Testing Only):`);
+    console.log(`   - GET /debug/env (masked environment variables)`);
+    console.log(`   - GET /debug/full-env (⚠️ FULL env - SENSITIVE!)`);
+    console.log(`   - GET /debug/recordings (list all recordings in storage)`);
+    console.log(`   - GET /debug/recording/:recordingId (specific recording details)`);
+    console.log(`\n⚠️ REMINDER: Remove debug endpoints before deploying to production!\n`);
   });
 });
