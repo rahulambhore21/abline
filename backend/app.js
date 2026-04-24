@@ -1907,21 +1907,25 @@ app.get('/recordings', authMiddleware, async (req, res) => {
     let { sessionId, userId, verify } = req.query;
     const shouldVerify = verify !== 'false'; // Default to true
 
-    // ✅ SECURITY: If not a host, enforce filtering by their own userId
+    const filter = {};
+    if (sessionId) filter.sessionId = sessionId;
+
+    // ✅ SECURITY: If not a host, enforce filtering by their own records
     if (req.user.role !== 'host') {
-      userId = req.user.userId; // Overwrite or enforce their own ID
+      filter.username = req.user.username; // ✅ Use username for reliable segregation
       console.log(`🛡️ Enforcing user-level segregation for: ${req.user.username}`);
+    } else if (userId) {
+      // ✅ Host is filtering by a specific userId (must be numeric)
+      const numericUid = Number(userId);
+      if (!isNaN(numericUid)) {
+        filter.userId = numericUid;
+      } else {
+        // If it's not a number, maybe it's a username?
+        filter.username = userId;
+      }
     }
 
     if (mongoReady) {
-      // ✅ NEW: Query from MongoDB for persistent storage
-      const filter = {};
-      if (sessionId) filter.sessionId = sessionId;
-
-      // ✅ FIXED: Only filter by userId if it's a valid number (not NaN)
-      if (userId && !isNaN(parseInt(userId))) {
-        filter.userId = Number(userId);
-      }
 
       let recordings = await RecordingModel.find(filter)
         .sort({ recordedAt: -1 })
