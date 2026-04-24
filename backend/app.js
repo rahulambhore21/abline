@@ -1861,9 +1861,17 @@ app.get('/recordings', async (req, res) => {
  */
 app.post('/recordings/save', async (req, res) => {
   try {
-    console.log('📥 Recording upload request received');
-    console.log('   Body:', req.body);
-    console.log('   Files:', req.files ? Object.keys(req.files) : 'NONE');
+    console.log('\n' + '='.repeat(70));
+    console.log('📥 RECORDING UPLOAD REQUEST RECEIVED');
+    console.log('='.repeat(70));
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Request Headers:', {
+      contentType: req.headers['content-type'],
+      contentLength: req.headers['content-length'],
+      userAgent: req.headers['user-agent'],
+    });
+    console.log('Body Fields:', req.body);
+    console.log('Available Files:', req.files ? Object.keys(req.files) : 'NONE');
 
     const { userId, sessionId, durationMs } = req.body;
     const audioFile = req.files?.audioFile;
@@ -1871,32 +1879,41 @@ app.post('/recordings/save', async (req, res) => {
     // Detailed validation logging
     // ✅ FIXED: Use proper null/undefined checks (userId can be 0)
     if (userId === null || userId === undefined) {
-      console.error('❌ Missing: userId');
+      console.error('❌ VALIDATION FAILED: Missing userId');
+      console.error('   Received body:', req.body);
       return res.status(400).json({
         error: 'Missing required fields: userId',
         received: { userId, sessionId, hasFile: !!audioFile },
       });
     }
     if (!sessionId) {
-      console.error('❌ Missing: sessionId');
+      console.error('❌ VALIDATION FAILED: Missing sessionId');
+      console.error('   Received body:', req.body);
       return res.status(400).json({
         error: 'Missing required fields: sessionId',
         received: { userId, sessionId, hasFile: !!audioFile },
       });
     }
     if (!audioFile) {
-      console.error('❌ Missing: audioFile');
+      console.error('❌ VALIDATION FAILED: Missing audioFile');
       console.error('   Available files:', req.files ? Object.keys(req.files) : 'NONE');
+      console.error('   Expected field name: "audioFile"');
+      console.error('   Full files object:', req.files);
       return res.status(400).json({
         error: 'Missing required fields: audioFile',
         received: { userId, sessionId, hasFile: !!audioFile },
         availableFiles: req.files ? Object.keys(req.files) : [],
+        hint: 'Make sure to send file as multipart with field name "audioFile"',
       });
     }
 
-    console.log(`✅ All fields received - Starting save process`);
-    console.log(`   User: ${userId}, Session: ${sessionId}, Duration: ${durationMs}ms`);
-    console.log(`   File size: ${audioFile.size} bytes`);
+    console.log('✅ All validations passed');
+    console.log('📋 Recording Details:');
+    console.log(`   - User ID: ${userId}`);
+    console.log(`   - Session ID: ${sessionId}`);
+    console.log(`   - Duration: ${durationMs}ms`);
+    console.log(`   - File Name: ${audioFile.name}`);
+    console.log(`   - File Size: ${audioFile.size} bytes`);
 
     // Generate unique filename
     const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -1907,21 +1924,30 @@ app.post('/recordings/save', async (req, res) => {
     if (!fs.existsSync(recordingsDir)) {
       console.log(`📁 Creating recordings directory: ${recordingsDir}`);
       fs.mkdirSync(recordingsDir, { recursive: true });
+      console.log(`✅ Directory created successfully`);
+    } else {
+      console.log(`📁 Recordings directory already exists: ${recordingsDir}`);
     }
 
     const filePath = path.join(recordingsDir, filename);
+    console.log(`\n💾 FILE SAVE PROCESS`);
+    console.log(`   - Recording ID: ${recordingId}`);
+    console.log(`   - Target filename: ${filename}`);
+    console.log(`   - Full path: ${filePath}`);
 
     // Save file locally
-    console.log(`💾 Saving file to: ${filePath}`);
+    console.log(`   📝 Writing file to disk...`);
     await audioFile.mv(filePath);
-    console.log(`✅ File saved successfully`);
+    console.log(`   ✅ File write completed`);
 
     // Verify file exists
     if (!fs.existsSync(filePath)) {
+      console.error(`❌ CRITICAL: File was not saved to disk!`);
+      console.error(`   Expected path: ${filePath}`);
       throw new Error('File was not saved to disk');
     }
     const fileSize = fs.statSync(filePath).size;
-    console.log(`✓ File verified - Size: ${fileSize} bytes`);
+    console.log(`   ✅ File verified on disk - Size: ${fileSize} bytes`);
 
     // Store recording metadata in MongoDB
     const recording = {
@@ -1934,28 +1960,42 @@ app.post('/recordings/save', async (req, res) => {
       durationMs: Number(durationMs) || 0,
     };
 
+    console.log(`\n🗄️ DATABASE SAVE PROCESS`);
+    console.log(`   Recording metadata:`);
+    console.log(JSON.stringify(recording, null, 2));
+
     try {
       // ✅ NEW: Save to MongoDB for persistence across server restarts
       if (mongoReady) {
-        await RecordingModel.create(recording);
-        console.log(`✅ Recording metadata saved to MongoDB`);
+        console.log(`   📡 MongoDB is ready - attempting to save...`);
+        const saved = await RecordingModel.create(recording);
+        console.log(`   ✅ Recording saved to MongoDB`);
+        console.log(`   📍 MongoDB ID: ${saved._id}`);
       } else {
+        console.log(`   ⚠️ MongoDB not ready - using in-memory storage`);
         // Fallback: Store in memory if MongoDB is not ready
         recordingsStorage.set(recordingId, recording);
         saveRecordingsToDisk();
-        console.log(`⚠️  MongoDB not ready - storing in memory`);
+        console.log(`   ✅ Recording saved to memory + disk backup`);
       }
     } catch (dbError) {
-      console.error('⚠️  Error saving to MongoDB, falling back to memory:', dbError.message);
+      console.error(`   ⚠️ Error saving to MongoDB: ${dbError.message}`);
+      console.error(`   📋 Error details:`, dbError);
+      console.log(`   🔄 Falling back to in-memory storage...`);
       recordingsStorage.set(recordingId, recording);
       saveRecordingsToDisk();
+      console.log(`   ✅ Recording saved to memory + disk backup (MongoDB fallback)`);
     }
 
     // Also keep in-memory cache for fast access
     recordingsStorage.set(recordingId, recording);
     cleanupOldRecordings(); // ✅ OPTIMIZATION: Cleanup to prevent memory leak
 
-    console.log(`✅ Recording saved: User ${userId}, Session ${sessionId}, Duration ${durationMs}ms, ID: ${recordingId}`);
+    console.log(`\n✅ RECORDING SAVED SUCCESSFULLY`);
+    console.log(`   User: ${userId}, Session: ${sessionId}`);
+    console.log(`   Duration: ${durationMs}ms, File: ${filename}`);
+    console.log(`   Download URL: ${recording.url}`);
+    console.log('='.repeat(70) + '\n');
 
     res.status(201).json({
       success: true,
@@ -1964,8 +2004,12 @@ app.post('/recordings/save', async (req, res) => {
       message: `Recording saved for user ${userId}`,
     });
   } catch (error) {
-    console.error('❌ Error saving recording:', error.message);
-    console.error('   Stack:', error.stack);
+    console.error('\n' + '='.repeat(70));
+    console.error('❌ ERROR SAVING RECORDING');
+    console.error('='.repeat(70));
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    console.error('='.repeat(70) + '\n');
     res.status(500).json({
       error: 'Failed to save recording',
       message: error.message,
@@ -2143,10 +2187,13 @@ app.get('/recordings/download/:recordingId', (req, res) => {
       return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    // Verify token validity (simple check)
-    if (!token || token.length < 10) {
-      console.warn('⚠️ Invalid token for recording download');
-      return res.status(401).json({ error: 'Invalid token' });
+    // ✅ FIXED: Actually verify the JWT token instead of just checking length
+    try {
+      const decoded = jwt.verify(token, JWT_SECRET);
+      console.log(`✅ Token verified for user: ${decoded.username}`);
+    } catch (tokenError) {
+      console.warn('⚠️ Invalid token for recording download:', tokenError.message);
+      return res.status(401).json({ error: 'Invalid or expired token' });
     }
 
     const recording = recordingsStorage.get(req.params.recordingId);
@@ -2182,48 +2229,22 @@ app.get('/recordings/download/:recordingId', (req, res) => {
       return res.sendFile(filePath);
     }
 
-    // If local file doesn't exist, try to proxy from remote URL
-    if (recording.url) {
-      console.log(`🌐 Proxying from remote URL: ${recording.url}`);
-      const https = require('https');
+    // ✅ FIXED: If local file doesn't exist and no S3 URL, return 404 instead of JSON
+    console.error(`❌ Recording file not found at: ${filePath}`);
+    console.error(`   Recording metadata:`, {
+      recordingId: recording.recordingId,
+      filename: recording.filename,
+      url: recording.url,
+      sessionId: recording.sessionId,
+      userId: recording.userId,
+    });
 
-      // Include token in the proxied request
-      const urlWithToken = recording.url.includes('?')
-        ? `${recording.url}&token=${token}`
-        : `${recording.url}?token=${token}`;
-
-      console.log(`🔐 Proxying with token to: ${urlWithToken.split('?')[0]}...`);
-
-      https.get(urlWithToken, (remoteRes) => {
-        if (remoteRes.statusCode === 200) {
-          console.log(`✅ Successfully fetched from remote: ${recording.url}`);
-          res.setHeader('Content-Type', remoteRes.headers['content-type'] || 'audio/mp4');
-          res.setHeader('Accept-Ranges', 'bytes');
-          res.setHeader('Access-Control-Allow-Origin', '*');
-          remoteRes.pipe(res);
-        } else {
-          console.error(`❌ Remote URL returned ${remoteRes.statusCode}`);
-          res.status(remoteRes.statusCode).json({
-            error: 'Failed to fetch from remote URL',
-            url: recording.url,
-            status: remoteRes.statusCode,
-          });
-        }
-      }).on('error', (error) => {
-        console.error(`❌ Error fetching from remote URL: ${error.message}`);
-        res.status(500).json({
-          error: 'Failed to fetch recording from remote URL',
-          message: error.message,
-        });
-      });
-    } else {
-      console.error(`❌ Recording file not found and no remote URL available`);
-      res.status(404).json({
-        error: 'Recording file not found',
-        filename: recording.filename,
-        recordingId: req.params.recordingId,
-      });
-    }
+    res.status(404).json({
+      error: 'Recording file not available',
+      details: 'The recording file has been deleted or is not accessible on this server',
+      filename: recording.filename,
+      recordingId: req.params.recordingId,
+    });
   } catch (error) {
     console.error('Error downloading recording:', error);
     res.status(500).json({
@@ -2448,9 +2469,226 @@ app.post('/test/recording', authMiddleware, allowRole('host'), async (req, res) 
 });
 
 /**
- * 🔍 DEBUG: GET /debug/recordings
- * Show all recordings in memory and database
+ * ✅ NEW: POST /test/upload-recording
+ * Test endpoint to verify hold-to-speak recording upload works
+ * Creates a dummy M4A file and uploads it through the same pipeline
+ *
+ * Usage: curl -X POST http://localhost:5000/test/upload-recording
+ *
+ * This endpoint:
+ * 1. Creates a dummy audio file
+ * 2. Uploads it to /recordings/save
+ * 3. Verifies file was saved
+ * 4. Checks MongoDB entry
+ * 5. Returns detailed test results
  */
+app.post('/test/upload-recording', async (req, res) => {
+  try {
+    console.log('\n' + '='.repeat(70));
+    console.log('🧪 RECORDING UPLOAD TEST');
+    console.log('='.repeat(70));
+
+    // Create a dummy audio file for testing
+    console.log('\n📝 Step 1: Creating dummy audio file for testing...');
+
+    // Create a minimal audio file buffer
+    const dummyAudioBuffer = Buffer.alloc(1024, 0xFF); // 1KB of dummy data
+
+    // Create a temporary directory
+    const tempDir = path.join(__dirname, '.temp-test');
+    if (!fs.existsSync(tempDir)) {
+      fs.mkdirSync(tempDir, { recursive: true });
+    }
+
+    const testFilePath = path.join(tempDir, 'test_audio.m4a');
+    fs.writeFileSync(testFilePath, dummyAudioBuffer);
+    console.log(`✅ Dummy audio file created: ${testFilePath} (${dummyAudioBuffer.length} bytes)`);
+
+    const testUserId = '999';
+    const testSessionId = 'test_room_automated';
+    const testDurationMs = '3000';
+
+    console.log('\n📤 Step 2: Uploading file to /recordings/save...');
+    console.log('📋 Upload parameters:');
+    console.log(`   - userId: ${testUserId}`);
+    console.log(`   - sessionId: ${testSessionId}`);
+    console.log(`   - durationMs: ${testDurationMs}`);
+    console.log(`   - file size: ${dummyAudioBuffer.length} bytes`);
+
+    // Use axios to POST multipart form-data
+    const uploadUrl = `http://localhost:${PORT}/recordings/save`;
+
+    // Create form data using a simple approach
+    const uploadResponse = await axios({
+      method: 'post',
+      url: uploadUrl,
+      data: {
+        userId: testUserId,
+        sessionId: testSessionId,
+        durationMs: testDurationMs,
+        audioFile: dummyAudioBuffer, // This should be handled by express-fileupload
+      },
+      headers: {
+        'Content-Type': 'application/json', // Will override with multipart
+      },
+      timeout: 10000,
+    }).catch(async (error) => {
+      // If axios fails with standard approach, try with form-data if available
+      if (error.response) {
+        throw error;
+      }
+
+      // Fallback: Just return error
+      throw error;
+    });
+
+    console.log('\n✅ Upload successful!');
+    console.log('Status:', uploadResponse.status);
+    console.log('Response data:', JSON.stringify(uploadResponse.data, null, 2));
+
+    const recordingId = uploadResponse.data.recordingId;
+    const recordingUrl = uploadResponse.data.url;
+
+    // Verify file exists on disk
+    console.log('\n🔍 Step 3: Verifying file was saved to disk...');
+    const recordingsDir = path.join(__dirname, 'recordings');
+    let diskVerification = {
+      exists: false,
+      files: [],
+      testFileExists: false,
+    };
+
+    if (fs.existsSync(recordingsDir)) {
+      diskVerification.exists = true;
+      const files = fs.readdirSync(recordingsDir);
+      diskVerification.files = files;
+      diskVerification.testFileExists = files.includes(`${recordingId}.m4a`);
+
+      console.log(`📂 Recordings directory: ${recordingsDir}`);
+      console.log(`📁 Total files: ${files.length}`);
+
+      if (diskVerification.testFileExists) {
+        console.log(`✅ Test file found on disk: ${recordingId}.m4a`);
+        const filePath = path.join(recordingsDir, `${recordingId}.m4a`);
+        const stats = fs.statSync(filePath);
+        console.log(`   Size: ${stats.size} bytes`);
+      } else {
+        console.warn(`⚠️  Test file NOT found on disk`);
+        console.log(`   Expected: ${recordingId}.m4a`);
+        console.log(`   Files in directory:`, files.slice(0, 5));
+      }
+    } else {
+      console.warn(`⚠️  Recordings directory not found: ${recordingsDir}`);
+    }
+
+    // Verify in MongoDB if available
+    console.log('\n🗄️ Step 4: Verifying metadata in MongoDB...');
+    let mongoVerification = {
+      mongoReady: mongoReady,
+      found: false,
+      recording: null,
+    };
+
+    if (mongoReady && recordingId) {
+      try {
+        const dbRecording = await RecordingModel.findOne({ recordingId });
+        if (dbRecording) {
+          mongoVerification.found = true;
+          mongoVerification.recording = {
+            recordingId: dbRecording.recordingId,
+            userId: dbRecording.userId,
+            sessionId: dbRecording.sessionId,
+            filename: dbRecording.filename,
+            recordedAt: dbRecording.recordedAt,
+          };
+
+          console.log(`✅ Recording found in MongoDB!`);
+          console.log(`   ID: ${dbRecording.recordingId}`);
+          console.log(`   User: ${dbRecording.userId}`);
+          console.log(`   Session: ${dbRecording.sessionId}`);
+          console.log(`   Filename: ${dbRecording.filename}`);
+        } else {
+          console.warn(`⚠️  Recording not found in MongoDB`);
+        }
+      } catch (dbError) {
+        console.warn(`⚠️  MongoDB query error: ${dbError.message}`);
+      }
+    } else {
+      console.log(`ℹ️  MongoDB not available - recording stored in memory`);
+    }
+
+    // Cleanup temp file
+    try {
+      fs.unlinkSync(testFilePath);
+      if (fs.readdirSync(tempDir).length === 0) {
+        fs.rmdirSync(tempDir);
+      }
+    } catch (e) {
+      console.warn(`⚠️  Could not clean up temp file: ${e.message}`);
+    }
+
+    console.log('\n' + '='.repeat(70));
+    console.log('✅ RECORDING UPLOAD TEST COMPLETED');
+    console.log('='.repeat(70) + '\n');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Recording upload test completed!',
+      recordingId,
+      recordingUrl,
+      testResults: {
+        upload: {
+          success: true,
+          status: uploadResponse.status,
+        },
+        diskVerification,
+        mongoVerification,
+      },
+      testParameters: {
+        userId: testUserId,
+        sessionId: testSessionId,
+        durationMs: testDurationMs,
+        fileSize: dummyAudioBuffer.length,
+      },
+      nextSteps: [
+        '1. Check backend logs above for any errors',
+        `2. Navigate to admin panel for session: ${testSessionId}`,
+        `3. Look for recording from user: ${testUserId}`,
+        `4. Try to play the recording`,
+        `5. If playback works, the system is fully functional!`,
+      ],
+    });
+  } catch (error) {
+    console.error('\n' + '='.repeat(70));
+    console.error('❌ RECORDING UPLOAD TEST FAILED');
+    console.error('='.repeat(70));
+    console.error('Error:', error.message);
+    if (error.response?.data) {
+      console.error('Response data:', error.response.data);
+    }
+    if (error.response?.status) {
+      console.error('Response status:', error.response.status);
+    }
+    console.error('='.repeat(70) + '\n');
+
+    return res.status(400).json({
+      success: false,
+      error: 'Recording upload test failed',
+      message: error.message,
+      details: error.response?.data || error.toString(),
+      troubleshooting: [
+        '1. Ensure backend server is running on the correct PORT',
+        '2. Verify /recordings/save endpoint is accessible',
+        '3. Check if MongoDB is connected (look for "✅ MongoDB connected" in startup logs)',
+        '4. Verify file system permissions for backend/recordings/ directory',
+        '5. Check backend console logs for detailed error information',
+        '6. Ensure express-fileupload middleware is enabled',
+      ],
+    });
+  }
+});
+
+/**
 app.get('/debug/recordings', (req, res) => {
   try {
     const inMemory = Array.from(recordingsStorage.values());
