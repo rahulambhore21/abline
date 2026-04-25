@@ -7,8 +7,32 @@ const {
 } = require('../config/agora');
 const { RtcRole } = require('agora-access-token');
 
+const ActiveRecording = require('../models/ActiveRecording');
 const AGORA_RECORDING_API = 'https://api.agora.io/v1/apps';
+
+// Keep the Map for fast access, but we'll sync it with DB
 const activeRecordings = new Map();
+
+/**
+ * Initializes active recordings from database on startup
+ */
+async function initializeActiveRecordings() {
+  try {
+    const actives = await ActiveRecording.find();
+    actives.forEach(a => {
+      activeRecordings.set(a.channelName, {
+        resourceId: a.resourceId,
+        sid: a.sid,
+        channelName: a.channelName,
+        mode: a.mode,
+        startedAt: a.startedAt
+      });
+    });
+    console.log(`✅ Loaded ${activeRecordings.size} active recording sessions from database`);
+  } catch (err) {
+    console.error('⚠️ Failed to load active recordings:', err.message);
+  }
+}
 
 async function acquireRecording(channelName) {
   try {
@@ -92,15 +116,22 @@ async function startRecording(channelName, resourceId) {
       },
     });
 
-    if (response.status === 200 && response.data.sid) {
-      console.log(`✅ Recording started. SessionId: ${response.data.sid}`);
-      activeRecordings.set(channelName, {
+      const recordingData = {
         resourceId,
         sid: response.data.sid,
         channelName,
         mode,
         startedAt: new Date(),
-      });
+      };
+
+      activeRecordings.set(channelName, recordingData);
+      
+      // Persist to DB
+      await ActiveRecording.findOneAndUpdate(
+        { channelName },
+        recordingData,
+        { upsert: true, new: true }
+      );
 
       return { resourceId, sid: response.data.sid };
     }
@@ -135,6 +166,9 @@ async function stopRecording(channelName, resourceId, sid, mode = 'mix') {
     if (response.status === 200) {
       console.log(`✅ Recording stopped. Session: ${sid}`);
       activeRecordings.delete(channelName);
+      
+      // Remove from DB
+      await ActiveRecording.deleteOne({ channelName });
       return;
     }
   } catch (error) {
@@ -148,4 +182,5 @@ module.exports = {
   startRecording,
   stopRecording,
   activeRecordings,
+  initializeActiveRecordings,
 };

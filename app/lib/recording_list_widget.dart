@@ -268,11 +268,9 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     final grouped = <String, List<Recording>>{};
 
     for (final recording in widget.recordings) {
-      // ✅ NEW: Skip recordings that are confirmed to not exist
-      if (_recordingExistenceCache.containsKey(recording.id) &&
-          _recordingExistenceCache[recording.id] == false) {
-        continue;
-      }
+      // We no longer skip missing recordings here. 
+      // Instead, we show them so the user knows they exist in history.
+
 
       try {
         final dateTime = DateTime.parse(recording.recordedAt);
@@ -353,16 +351,21 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
                         width: 40,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: isCurrentlyPlaying
-                              ? Colors.blue.shade600
-                              : Colors.blue.shade400,
+                          color: _recordingExistenceCache[recording.id] == false
+                              ? Colors.grey.shade700
+                              : (isCurrentlyPlaying
+                                  ? Colors.blue.shade600
+                                  : Colors.blue.shade400),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
-                          isCurrentlyPlaying ? Icons.stop : Icons.play_arrow,
+                          _recordingExistenceCache[recording.id] == false
+                              ? Icons.block
+                              : (isCurrentlyPlaying ? Icons.stop : Icons.play_arrow),
                           color: Colors.white,
                           size: 20,
                         ),
+
                       ),
                       const SizedBox(width: 12),
 
@@ -380,13 +383,29 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Text(
-                              'Duration: $durationString',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                fontSize: 12,
-                              ),
+                            Row(
+                              children: [
+                                Text(
+                                  'Duration: $durationString',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                if (_recordingExistenceCache[recording.id] == false) ...[
+                                  const SizedBox(width: 8),
+                                  const Text(
+                                    '• File Missing',
+                                    style: TextStyle(
+                                      color: Colors.orange,
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ],
                             ),
+
                           ],
                         ),
                       ),

@@ -1,5 +1,6 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '.env') });
+const mongoose = require('mongoose');
 
 const express = require('express');
 const cors = require('cors');
@@ -58,8 +59,12 @@ app.use(errorHandler);
 const start = async () => {
   try {
     await connectDB();
+    const dbName = mongoose.connection.name;
+    const dbHost = mongoose.connection.host;
+    console.log(`📡 Connected to MongoDB: ${dbName} on ${dbHost}`);
     
     // Initialize recording storage after DB is connected
+
     console.log('📦 S3 Configuration Status:', {
       bucket: process.env.RECORDING_BUCKET ? '✅ Set' : '❌ MISSING',
       region: process.env.RECORDING_REGION ? '✅ Set' : '❌ MISSING',

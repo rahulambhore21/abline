@@ -14,15 +14,31 @@ const RECORDINGS_METADATA_FILE = path.join(__dirname, '../../.recordings-metadat
 
 async function initializeRecordingsStorage() {
   try {
+    console.log('🔄 Initializing recordings storage from database...');
     const recordings = await Recording.find().lean();
+    recordingsStorage.clear(); // Ensure we start fresh
     recordings.forEach(r => {
       recordingsStorage.set(r.recordingId, r);
     });
+
+    // Also initialize active recording sessions
+    const recordingService = require('../services/RecordingService');
+    await recordingService.initializeActiveRecordings();
+
+    
     console.log(`✅ Loaded ${recordingsStorage.size} recordings from database into memory storage`);
+
+    
+    // Log a few IDs for verification
+    if (recordings.length > 0) {
+      const sampleIds = recordings.slice(0, 3).map(r => r.recordingId);
+      console.log('📋 Sample recording IDs:', sampleIds);
+    }
   } catch (err) {
     console.error('⚠️ Failed to initialize recordings storage:', err.message);
   }
 }
+
 
 function saveRecordingsToDisk() {
   try {
@@ -199,15 +215,25 @@ exports.saveRecording = async (req, res, next) => {
 };
 
 
-exports.downloadRecording = (req, res) => {
+exports.downloadRecording = async (req, res) => {
   try {
     const { recordingId } = req.params;
-    const recording = recordingsStorage.get(recordingId);
+    let recording = recordingsStorage.get(recordingId);
+    
+    if (!recording) {
+      console.log(`🔍 Recording ${recordingId} not in cache, checking database...`);
+      recording = await Recording.findOne({ recordingId }).lean();
+      if (recording) {
+        recordingsStorage.set(recordingId, recording);
+      }
+    }
+
     if (!recording) return res.status(404).json({ error: 'Recording not found' });
 
-    if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
+    if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws') || recording.url.startsWith('http'))) {
       return res.redirect(recording.url);
     }
+
 
     const filePath = path.join(__dirname, '../../recordings', recording.filename);
     if (fs.existsSync(filePath)) {
