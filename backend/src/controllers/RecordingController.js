@@ -174,6 +174,11 @@ exports.downloadRecording = (req, res) => {
   }
 };
 
+exports.activeRecordings = (req, res) => {
+  const recordings = Array.from(activeRecordings.values());
+  res.json({ recordings });
+};
+
 exports.webhook = async (req, res) => {
   try {
     const { sid, cname, fileList } = req.body;
