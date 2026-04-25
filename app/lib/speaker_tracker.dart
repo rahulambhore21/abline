@@ -39,6 +39,7 @@ class SpeakerTracker {
   Timer? _silenceTimer;
 
   final OnSpeakingEventComplete? onSpeakingEventComplete;
+  final dynamic authService; // Pass AuthService here
   final String backendUrl;
   final String sessionId;
 
@@ -49,6 +50,7 @@ class SpeakerTracker {
     required this.backendUrl,
     required this.sessionId,
     this.onSpeakingEventComplete,
+    this.authService, // Pass authService to get tokens
   }) : speakingStatesNotifier = ValueNotifier<Map<int, UserSpeakingState>>({});
 
   /// Start background silence checks.
@@ -185,13 +187,19 @@ class SpeakerTracker {
 
   Future<void> _sendEventToBackend(SpeakingEvent event) async {
     try {
+      final token = authService != null ? await authService.getToken() : null;
+      
       final response = await http
           .post(
             Uri.parse('$backendUrl/events/speaking'),
-            headers: {'Content-Type': 'application/json'},
+            headers: {
+              'Content-Type': 'application/json',
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
             body: jsonEncode(event.toJson()),
           )
           .timeout(const Duration(seconds: 10));
+
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         print('✅ Event sent successfully: ${event.userId}');

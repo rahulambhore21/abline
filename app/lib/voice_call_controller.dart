@@ -76,11 +76,13 @@ class VoiceCallController extends ChangeNotifier {
     speakerTracker = SpeakerTracker(
       backendUrl: backendUrl,
       sessionId: channelName,
+      authService: authService, // Pass authService here
       onSpeakingEventComplete: (event) {
         speakingEvents.add(event);
         notifyListeners();
       },
     );
+
     try {
       await _loadUserInfo();
       await _initializeAgora();
@@ -558,8 +560,14 @@ class VoiceCallController extends ChangeNotifier {
     if (_checkingRecordingStatus) return;
     _checkingRecordingStatus = true;
     try {
+      final token = await authService.getToken();
       final response = await http
-          .get(Uri.parse('$backendUrl/recording/active'))
+          .get(
+            Uri.parse('$backendUrl/recording/active'),
+            headers: {
+              if (token != null) 'Authorization': 'Bearer $token',
+            },
+          )
           .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -573,6 +581,7 @@ class VoiceCallController extends ChangeNotifier {
       _checkingRecordingStatus = false;
     }
   }
+
 
   // ─── Local audio recording (hold-to-speak) ────────────────────────────────
 

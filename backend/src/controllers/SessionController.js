@@ -28,9 +28,11 @@ exports.addUserToSession = async (req, res, next) => {
 
     for (const [uid, uData] of session.users.entries()) {
       if (uData.username === username && uid !== userId) {
-        return res.status(409).json({ error: 'Duplicate username' });
+        console.log(`♻️ User re-joined: Replacing old UID ${uid} with new UID ${userId} for ${username}`);
+        session.users.delete(uid);
       }
     }
+
 
     if (role === 'host') session.hostUid = userId;
 
