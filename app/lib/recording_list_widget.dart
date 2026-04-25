@@ -113,12 +113,16 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
   /// Play a recording from URL (auto-plays and auto-stops when done)
   Future<void> _playRecording(Recording recording) async {
     try {
-      // ✅ NEW: Force audio to Speaker mode
+      // ✅ NEW: Force audio to Speaker mode with higher volume profile
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration(
-        avAudioSessionCategory: AVAudioSessionCategory.playAndRecord,
-        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker,
-        avAudioSessionMode: AVAudioSessionMode.videoChat, // VideoChat mode often forces speaker output
+        // Playback category is generally louder than playAndRecord
+        avAudioSessionCategory: AVAudioSessionCategory.playback, 
+        avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker | 
+                                       AVAudioSessionCategoryOptions.allowBluetooth | 
+                                       AVAudioSessionCategoryOptions.allowBluetoothA2DP,
+        // moviePlayback mode is optimized for high-volume speaker output
+        avAudioSessionMode: AVAudioSessionMode.moviePlayback, 
         androidAudioAttributes: AndroidAudioAttributes(
           contentType: AndroidAudioContentType.music,
           usage: AndroidAudioUsage.media,
@@ -127,6 +131,11 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
         androidWillPauseWhenDucked: true,
       ));
       await session.setActive(true);
+
+      // Ensure player volume is at maximum
+      await _audioPlayer.setVolume(1.0);
+      await _audioPlayer.setSpeed(1.0);
+
 
       // ✅ NEW: Verify recording exists first
       debugPrint('🎵 Attempting to play recording: ${recording.id}');
