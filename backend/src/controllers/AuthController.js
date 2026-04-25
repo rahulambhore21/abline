@@ -140,6 +140,35 @@ exports.listUsers = async (req, res, next) => {
   }
 };
 
+exports.deleteUser = async (req, res, next) => {
+  try {
+    if (!ensureMongoForAuth(res)) return;
+
+    const { id } = req.params;
+
+    const user = await User.findById(id);
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.role === 'host') {
+      return res.status(403).json({ error: 'Cannot delete the host user' });
+    }
+
+    await User.findByIdAndDelete(id);
+
+    console.log(`🗑️ User deleted by host ${req.user.username}: ${user.username}`);
+
+    res.json({
+      success: true,
+      message: `User '${user.username}' deleted successfully`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 exports.getHost = async (req, res, next) => {
   try {
     const host = await User.findOne({ role: 'host' }).select('username').lean();

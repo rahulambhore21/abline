@@ -132,6 +132,31 @@ class AuthService {
     }
   }
 
+  /// Delete a user (host-only)
+  Future<bool> deleteUser(String userId) async {
+    try {
+      final token = await getToken();
+      if (token == null) throw Exception('Not authenticated');
+
+      final response = await http.delete(
+        Uri.parse('$backendUrl/auth/users/$userId'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+      );
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        final error = jsonDecode(response.body);
+        throw Exception(error['error'] ?? 'User deletion failed');
+      }
+    } catch (e) {
+      throw Exception('Delete user error: $e');
+    }
+  }
+
   /// Get stored JWT token (cached)
   Future<String?> getToken() async {
     await _initializeCache();

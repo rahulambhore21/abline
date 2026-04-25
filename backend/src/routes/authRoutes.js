@@ -7,6 +7,7 @@ router.post('/register-host', authController.registerHost);
 router.post('/login', authController.login);
 router.post('/create-user', authMiddleware, allowRole('host'), authController.createUser);
 router.get('/users', authMiddleware, allowRole('host'), authController.listUsers);
+router.delete('/users/:id', authMiddleware, allowRole('host'), authController.deleteUser);
 router.get('/host', authController.getHost);
 
 module.exports = router;

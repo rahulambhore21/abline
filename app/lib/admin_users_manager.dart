@@ -101,6 +101,39 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
     }
   }
 
+  Future<void> _deleteUser(String userId, String username) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete User'),
+        content: Text('Are you sure you want to delete user "$username"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        final success = await _authService.deleteUser(userId);
+        if (success) {
+          _showSnackBar('User deleted successfully');
+          _loadUsers();
+        }
+      } catch (e) {
+        _showSnackBar('Error: $e', isError: true);
+      }
+    }
+  }
+
   void _showSnackBar(String message, {bool isError = false}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -326,7 +359,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                     ),
                     DataColumn(
                       label: Text(
-                        'Created',
+                        'Actions',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -381,13 +414,13 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                           ),
                         ),
                         DataCell(
-                          Text(
-                            formattedDate,
-                            style: const TextStyle(
-                              color: Colors.white70,
-                              fontSize: 13,
-                            ),
-                          ),
+                          user['role'] == 'host'
+                              ? const SizedBox.shrink()
+                              : IconButton(
+                                  icon: const Icon(Icons.delete, color: Colors.redAccent),
+                                  onPressed: () => _deleteUser(user['id'], user['username'] ?? 'Unknown'),
+                                  tooltip: 'Delete User',
+                                ),
                         ),
                       ],
                     );
