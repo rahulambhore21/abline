@@ -11,7 +11,9 @@
  * ✓ Recording start capability
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const axios = require('axios');
 const { RtcTokenBuilder, RtcRole } = require('agora-access-token');
 

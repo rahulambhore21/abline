@@ -1,4 +1,6 @@
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -58,7 +60,14 @@ const start = async () => {
     await connectDB();
     
     // Initialize recording storage after DB is connected
+    console.log('📦 S3 Configuration Status:', {
+      bucket: process.env.RECORDING_BUCKET ? '✅ Set' : '❌ MISSING',
+      region: process.env.RECORDING_REGION ? '✅ Set' : '❌ MISSING',
+      accessKey: process.env.RECORDING_ACCESS_KEY ? '✅ Set' : '❌ MISSING',
+    });
+
     await recordingController.initializeRecordingsStorage();
+
     
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);

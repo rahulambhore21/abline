@@ -6,7 +6,9 @@
  * This script tests your recording configuration without needing to run the full server.
  */
 
-require('dotenv').config();
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+
 
 console.log('\n' + '='.repeat(70));
 console.log('🧪 RECORDING SETUP DIAGNOSTIC TEST');
