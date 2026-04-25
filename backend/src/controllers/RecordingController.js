@@ -69,7 +69,10 @@ exports.startRecording = async (req, res, next) => {
       return res.status(400).json({ error: 'Missing required fields: channelName, uid' });
     }
     const resourceId = await acquireRecording(channelName);
-    const { sid } = await startRecording(channelName, resourceId);
+    const userId = req.body.userId || req.user?.id;
+    const username = req.body.username || req.user?.username;
+    
+    const { sid } = await startRecording(channelName, resourceId, userId, username);
     res.status(201).json({ resourceId, sid, message: 'Recording started successfully' });
   } catch (error) {
     next(error);
@@ -281,28 +284,47 @@ exports.webhook = async (req, res) => {
       return res.status(200).json({ status: 'processed' });
     }
 
-    console.log(`📄 Webhook contains ${fileList.length} files.`);
+    const ActiveRecording = require('../models/ActiveRecording');
+    const activeRec = await ActiveRecording.findOne({ sid }).lean() || await ActiveRecording.findOne({ channelName: cname }).lean();
+    
+    if (activeRec) {
+      console.log(`ℹ️ Found metadata for session: User=${activeRec.username}, ID=${activeRec.userId}`);
+    } else {
+      console.warn(`⚠️ No active recording metadata found for SID: ${sid}. Recording will have default metadata.`);
+    }
 
     for (const file of fileList) {
       const { filename, uid } = file;
       console.log(`   - Processing file: ${filename} for UID: ${uid}`);
       
       const uidMatch = filename.match(/uid_(\d+)/);
-      const userId = uidMatch ? uidMatch[1] : uid;
+      const userId = activeRec?.userId || (uidMatch ? Number(uidMatch[1]) : Number(uid));
+      const username = activeRec?.username || 'Unknown';
       const recordingId = sid ? `${sid}_${filename}` : `rec_${Date.now()}_${filename}`;
       const bucket = process.env.RECORDING_BUCKET;
+      
+      // Use regional URL for better compatibility if needed, but keeping current format
       const s3Url = bucket ? `https://${bucket}.s3.amazonaws.com/${filename}` : '';
 
       await Recording.create({
         recordingId,
-        userId: Number(userId) || 0,
+        userId,
+        username,
         sessionId: cname,
         filename,
-        recordedAt: new Date(),
+        recordedAt: activeRec?.startedAt || new Date(),
         url: s3Url,
       });
       console.log(`   ✅ Record created for ${recordingId}`);
     }
+
+    // Cleanup active recording if we've received files
+    if (activeRec) {
+       await ActiveRecording.deleteOne({ sid });
+       activeRecordings.delete(cname);
+       console.log(`   🧹 Cleaned up ActiveRecording for ${cname}`);
+    }
+
     res.status(200).json({ status: 'processed' });
   } catch (error) {
     console.error('❌ Webhook processing error:', error.message);

@@ -24,11 +24,20 @@ async function initializeActiveRecordings() {
         resourceId: a.resourceId,
         sid: a.sid,
         channelName: a.channelName,
+        userId: a.userId,
+        username: a.username,
         mode: a.mode,
         startedAt: a.startedAt
       });
     });
     console.log(`✅ Loaded ${activeRecordings.size} active recording sessions from database`);
+    
+    // Cleanup stale recordings (older than 24h)
+    const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const result = await ActiveRecording.deleteMany({ startedAt: { $lt: staleThreshold } });
+    if (result.deletedCount > 0) {
+      console.log(`🧹 Cleaned up ${result.deletedCount} stale recording sessions older than 24h`);
+    }
   } catch (err) {
     console.error('⚠️ Failed to load active recordings:', err.message);
   }
@@ -65,7 +74,7 @@ async function acquireRecording(channelName) {
   }
 }
 
-async function startRecording(channelName, resourceId) {
+async function startRecording(channelName, resourceId, userId, username) {
   try {
     validateRecordingCredentials();
     const mode = 'mix';
@@ -125,6 +134,8 @@ async function startRecording(channelName, resourceId) {
           resourceId,
           sid: response.data.sid,
           channelName,
+          userId,
+          username,
           mode,
           startedAt: new Date(),
         };
@@ -175,11 +186,8 @@ async function stopRecording(channelName, resourceId, sid, mode = 'mix') {
     });
 
     if (response.status === 200) {
-      console.log(`✅ Recording stopped. Session: ${sid}`);
-      activeRecordings.delete(channelName);
-      
-      // Remove from DB
-      await ActiveRecording.deleteOne({ channelName });
+      console.log(`✅ Recording stopped command sent. Session: ${sid}`);
+      // Metadata is kept in DB/Map until webhook confirms file arrival
       return;
     }
   } catch (error) {
