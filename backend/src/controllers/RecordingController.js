@@ -143,11 +143,13 @@ exports.listRecordings = async (req, res, next) => {
         username: r.username || 'Unknown',
         sessionId: r.sessionId,
         filename: r.filename,
-        url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+        // Always use our proxy URL so we can handle authentication and S3 fetching
+        url: `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
         exists: r.exists, // Pass existence flag
       };
+
 
 
       const uId = String(r.userId);
@@ -230,21 +232,35 @@ exports.downloadRecording = async (req, res) => {
 
     if (!recording) return res.status(404).json({ error: 'Recording not found' });
 
-    if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws') || recording.url.startsWith('http'))) {
-      return res.redirect(recording.url);
+    // Handle S3 Streaming
+    if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
+      try {
+        const { getS3FileStream } = require('../services/S3Service');
+        const stream = await getS3FileStream(recording.filename);
+        
+        res.setHeader('Content-Type', 'audio/mp4');
+        res.setHeader('Accept-Ranges', 'bytes');
+        return stream.pipe(res);
+      } catch (s3Error) {
+        console.error('❌ S3 Streaming failed:', s3Error.message);
+        // Fallback to redirect if streaming fails
+        return res.redirect(recording.url);
+      }
     }
-
 
     const filePath = path.join(__dirname, '../../recordings', recording.filename);
     if (fs.existsSync(filePath)) {
       res.setHeader('Content-Type', 'audio/mp4');
+      res.setHeader('Accept-Ranges', 'bytes');
       return res.sendFile(filePath);
     }
     res.status(404).json({ error: 'Recording file not available' });
   } catch (error) {
+    console.error('❌ Download error:', error.message);
     res.status(500).json({ error: 'Failed to download recording', message: error.message });
   }
 };
+
 
 exports.activeRecordings = (req, res) => {
   const recordings = Array.from(activeRecordings.values());
@@ -258,10 +274,19 @@ exports.activeRecordings = (req, res) => {
 exports.webhook = async (req, res) => {
   try {
     const { sid, cname, fileList } = req.body;
-    if (!fileList || fileList.length === 0) return res.status(200).json({ status: 'processed' });
+    console.log(`🔔 Agora Webhook received for session: ${cname}, SID: ${sid}`);
+    
+    if (!fileList || fileList.length === 0) {
+      console.log('ℹ️ Webhook contained no files.');
+      return res.status(200).json({ status: 'processed' });
+    }
+
+    console.log(`📄 Webhook contains ${fileList.length} files.`);
 
     for (const file of fileList) {
       const { filename, uid } = file;
+      console.log(`   - Processing file: ${filename} for UID: ${uid}`);
+      
       const uidMatch = filename.match(/uid_(\d+)/);
       const userId = uidMatch ? uidMatch[1] : uid;
       const recordingId = sid ? `${sid}_${filename}` : `rec_${Date.now()}_${filename}`;
@@ -276,12 +301,15 @@ exports.webhook = async (req, res) => {
         recordedAt: new Date(),
         url: s3Url,
       });
+      console.log(`   ✅ Record created for ${recordingId}`);
     }
     res.status(200).json({ status: 'processed' });
   } catch (error) {
+    console.error('❌ Webhook processing error:', error.message);
     res.status(200).json({ status: 'processed', error: error.message });
   }
 };
+
 
 exports.recordingsStorage = recordingsStorage;
 exports.initializeRecordingsStorage = initializeRecordingsStorage;

@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const path = require('path');
 
 const regionMap = {
@@ -58,6 +58,28 @@ async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
   return `https://${bucket}.s3.amazonaws.com/${filename}`;
 }
 
+/**
+ * Gets a file from S3 as a stream
+ * @param {string} filename 
+ * @returns {Promise<ReadableStream>}
+ */
+async function getS3FileStream(filename) {
+  const bucket = process.env.RECORDING_BUCKET;
+  if (!bucket) {
+    throw new Error('RECORDING_BUCKET is not defined in .env');
+  }
+
+  const command = new GetObjectCommand({
+    Bucket: bucket,
+    Key: filename,
+  });
+
+  const response = await s3Client.send(command);
+  return response.Body;
+}
+
 module.exports = {
   uploadToS3,
+  getS3FileStream,
 };
+

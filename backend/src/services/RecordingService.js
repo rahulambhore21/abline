@@ -108,44 +108,51 @@ async function startRecording(channelName, resourceId) {
     };
 
     console.log(`📤 Starting ${mode.toUpperCase()} recording for channel: ${channelName}`);
+    console.log(`📦 Storage Config: Bucket=${bucket}, Region=${region}, Vendor=${vendor}`);
 
-    const response = await axios.post(url, payload, {
-      headers: {
-        Authorization: createRecordingAuthHeader(),
-        'Content-Type': 'application/json',
-      },
-    });
+    try {
+      const response = await axios.post(url, payload, {
+        headers: {
+          Authorization: createRecordingAuthHeader(),
+          'Content-Type': 'application/json',
+        },
+      });
 
-    if (response.status === 200 && response.data.sid) {
-      console.log(`✅ Recording started. SessionId: ${response.data.sid}`);
-      
-      const recordingData = {
-        resourceId,
-        sid: response.data.sid,
-        channelName,
-        mode,
-        startedAt: new Date(),
-      };
+      if (response.status === 200 && response.data.sid) {
+        console.log(`✅ Recording started successfully. SessionId: ${response.data.sid}`);
+        
+        const recordingData = {
+          resourceId,
+          sid: response.data.sid,
+          channelName,
+          mode,
+          startedAt: new Date(),
+        };
 
-      activeRecordings.set(channelName, recordingData);
-      
-      // Persist to DB
-      await ActiveRecording.findOneAndUpdate(
-        { channelName },
-        recordingData,
-        { upsert: true, new: true }
-      );
+        activeRecordings.set(channelName, recordingData);
+        
+        // Persist to DB
+        await ActiveRecording.findOneAndUpdate(
+          { channelName },
+          recordingData,
+          { upsert: true, new: true }
+        );
 
-      return { resourceId, sid: response.data.sid };
+        return { resourceId, sid: response.data.sid };
+      }
+
+      console.error('⚠️ Agora Start API returned non-200 status:', response.status, response.data);
+      throw new Error('No sid returned from start API');
+    } catch (apiError) {
+      console.error('❌ Agora Start API Call failed:', apiError.response?.data || apiError.message);
+      throw apiError;
     }
-
-
-    throw new Error('No sid returned from start API');
   } catch (error) {
-    console.error('❌ Start recording failed:', error.response?.data || error.message);
+    console.error('❌ startRecording service error:', error.message);
     throw new Error(`Failed to start recording: ${error.message}`);
   }
 }
+
 
 async function stopRecording(channelName, resourceId, sid, mode = 'mix') {
   try {

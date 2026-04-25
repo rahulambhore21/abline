@@ -623,10 +623,17 @@ class VoiceCallController extends ChangeNotifier {
 
   Future<void> _uploadRecording(File audioFile, int durationMs) async {
     try {
+      final token = await authService.getToken();
       final request =
           http.MultipartRequest('POST', Uri.parse('$backendUrl/recordings/save'));
+      
+      if (token != null) {
+        request.headers['Authorization'] = 'Bearer $token';
+      }
+      
       request.files
           .add(await http.MultipartFile.fromPath('audioFile', audioFile.path));
+
       request.fields['userId'] = uid.toString();
       request.fields['username'] = username; // ✅ NEW: Pass username
       request.fields['sessionId'] = channelName;
