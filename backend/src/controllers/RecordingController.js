@@ -3,6 +3,8 @@ const Recording = require('../models/Recording');
 const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
+const { uploadToS3 } = require('../services/S3Service');
+
 
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud';
 
@@ -138,11 +140,22 @@ exports.saveRecording = async (req, res, next) => {
 
     const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const filename = `${recordingId}.m4a`;
-    const recordingsDir = path.join(__dirname, '../../recordings');
-    if (!fs.existsSync(recordingsDir)) fs.mkdirSync(recordingsDir, { recursive: true });
-
-    const filePath = path.join(recordingsDir, filename);
-    await audioFile.mv(filePath);
+    
+    // Upload to S3 instead of saving locally
+    let s3Url;
+    try {
+      s3Url = await uploadToS3(audioFile.data, filename, audioFile.mimetype);
+      console.log(`✅ Recording uploaded to S3: ${s3Url}`);
+    } catch (uploadError) {
+      console.error('❌ S3 Upload failed, falling back to local storage:', uploadError.message);
+      
+      // Fallback to local storage if S3 fails
+      const recordingsDir = path.join(__dirname, '../../recordings');
+      if (!fs.existsSync(recordingsDir)) fs.mkdirSync(recordingsDir, { recursive: true });
+      const filePath = path.join(recordingsDir, filename);
+      await audioFile.mv(filePath);
+      s3Url = `${PUBLIC_URL}/recordings/download/${recordingId}`;
+    }
 
     const recordingData = {
       recordingId,
@@ -150,7 +163,7 @@ exports.saveRecording = async (req, res, next) => {
       username: username || 'Unknown',
       sessionId,
       filename,
-      url: `${PUBLIC_URL}/recordings/download/${recordingId}`,
+      url: s3Url,
       recordedAt: new Date(),
       durationMs: Number(durationMs) || 0,
     };
@@ -164,6 +177,7 @@ exports.saveRecording = async (req, res, next) => {
     next(error);
   }
 };
+
 
 exports.downloadRecording = (req, res) => {
   try {
