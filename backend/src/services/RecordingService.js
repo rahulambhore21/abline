@@ -116,6 +116,9 @@ async function startRecording(channelName, resourceId) {
       },
     });
 
+    if (response.status === 200 && response.data.sid) {
+      console.log(`✅ Recording started. SessionId: ${response.data.sid}`);
+      
       const recordingData = {
         resourceId,
         sid: response.data.sid,
@@ -135,6 +138,7 @@ async function startRecording(channelName, resourceId) {
 
       return { resourceId, sid: response.data.sid };
     }
+
 
     throw new Error('No sid returned from start API');
   } catch (error) {
