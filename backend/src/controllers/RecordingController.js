@@ -86,9 +86,12 @@ exports.stopRecording = async (req, res, next) => {
 
 exports.listRecordings = async (req, res, next) => {
   try {
-    const { sessionId, userId, verify } = req.query;
+    const { userId, verify } = req.query;
+    // sessionId can come from query (?sessionId=...) or path params (/session/:sessionId)
+    const sessionId = req.query.sessionId || req.params.sessionId;
     const shouldVerify = verify !== 'false';
     const filter = {};
+    
     if (sessionId) filter.sessionId = sessionId;
 
     if (req.user.role !== 'host') {
@@ -99,24 +102,26 @@ exports.listRecordings = async (req, res, next) => {
       else filter.username = userId;
     }
 
+    console.log(`🔍 Listing recordings with filter:`, JSON.stringify(filter));
+
     let recordings = await Recording.find(filter).sort({ recordedAt: -1 }).lean();
 
     if (shouldVerify) {
       const verified = [];
-      const deletedIds = [];
       for (const r of recordings) {
-        if (recordingExists(r)) verified.push(r);
-        else deletedIds.push(r.recordingId);
-      }
-      if (deletedIds.length > 0) {
-        await Recording.deleteMany({ recordingId: { $in: deletedIds } });
+        const exists = recordingExists(r);
+        verified.push({
+          ...r,
+          exists, // Add a flag instead of deleting
+        });
       }
       recordings = verified;
     }
 
-    res.json({
-      total: recordings.length,
-      recordings: recordings.map(r => ({
+    // Group by user for the admin dashboard
+    const byUser = {};
+    const formattedRecordings = recordings.map(r => {
+      const formatted = {
         id: r.recordingId,
         userId: r.userId,
         username: r.username || 'Unknown',
@@ -125,12 +130,27 @@ exports.listRecordings = async (req, res, next) => {
         url: r.url || `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
-      })),
+        exists: r.exists, // Pass existence flag
+      };
+
+
+      const uId = String(r.userId);
+      if (!byUser[uId]) byUser[uId] = [];
+      byUser[uId].push(formatted);
+      
+      return formatted;
+    });
+
+    res.json({
+      total: formattedRecordings.length,
+      recordings: formattedRecordings,
+      byUser, // ✅ REQUIRED for Admin Dashboard
     });
   } catch (error) {
     next(error);
   }
 };
+
 
 exports.saveRecording = async (req, res, next) => {
   try {
