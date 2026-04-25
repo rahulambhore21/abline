@@ -1,9 +1,5 @@
-const SpeakingEvent = require('../models/SpeakingEvent');
-const User = require('../models/User');
-const mongoose = require('mongoose');
-const { acquireRecording, startRecording, stopRecording } = require('../services/RecordingService');
-
-const activeSessions = new Map();
+const Session = require('../models/Session');
+// activeSessions Map removed in favor of MongoDB persistence
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 exports.addUserToSession = async (req, res, next) => {
@@ -15,30 +11,37 @@ exports.addUserToSession = async (req, res, next) => {
       return res.status(400).json({ error: 'Missing required fields: userId, username' });
     }
 
-    if (!activeSessions.has(sessionId)) {
-      activeSessions.set(sessionId, {
-        sessionId,
-        users: new Map(),
-        isActive: false,
-        hostUid: null,
-      });
+    // Use findOneAndUpdate with upsert to manage session state in DB
+    const session = await Session.findOneAndUpdate(
+      { sessionId },
+      { 
+        $set: { isActive: true }, // Ensure session is active if someone is joining
+        $addToSet: { 
+          users: { userId, username, role: role || 'user', isSpeaking: false } 
+        } 
+      },
+      { upsert: true, new: true }
+    );
+
+    // If host is joining, update hostUid
+    if (role === 'host') {
+      await Session.updateOne({ sessionId }, { $set: { hostUid: userId } });
     }
 
-    const session = activeSessions.get(sessionId);
+    // Handle user re-join logic in DB (remove old UIDs for same username if needed)
+    // For simplicity, we'll keep the current implementation's spirit but in MongoDB
+    await Session.updateOne(
+      { sessionId },
+      { $pull: { users: { username, userId: { $ne: userId } } } }
+    );
 
-    for (const [uid, uData] of session.users.entries()) {
-      if (uData.username === username && uid !== userId) {
-        console.log(`♻️ User re-joined: Replacing old UID ${uid} with new UID ${userId} for ${username}`);
-        session.users.delete(uid);
-      }
-    }
+    const updatedSession = await Session.findOne({ sessionId });
 
-
-    if (role === 'host') session.hostUid = userId;
-
-    session.users.set(userId, { userId, username, isSpeaking: false, role: role || 'user' });
-
-    res.status(200).json({ success: true, message: `User ${userId} added`, hostUid: session.hostUid });
+    res.status(200).json({ 
+      success: true, 
+      message: `User ${userId} added`, 
+      hostUid: updatedSession.hostUid 
+    });
 
     User.findOneAndUpdate({ username }, { lastKnownUid: userId }).catch(err => console.error(err));
   } catch (error) {
@@ -46,44 +49,50 @@ exports.addUserToSession = async (req, res, next) => {
   }
 };
 
-exports.getSessionUsers = (req, res) => {
+exports.getSessionUsers = async (req, res) => {
   const { id: sessionId } = req.params;
-  const session = activeSessions.get(sessionId);
+  const session = await Session.findOne({ sessionId }).lean();
+  
   if (!session) return res.json({ sessionId, users: [], total: 0, hostUid: null });
 
-  const users = Array.from(session.users.values()).map(u => ({
-    userId: u.userId,
-    username: u.username,
-    isSpeaking: u.isSpeaking,
-    role: u.role,
-  }));
-
-  res.json({ sessionId, users, total: users.length, hostUid: session.hostUid });
+  res.json({ 
+    sessionId, 
+    users: session.users, 
+    total: session.users.length, 
+    hostUid: session.hostUid 
+  });
 };
 
 exports.startSession = async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
-    if (!activeSessions.has(sessionId)) {
-      activeSessions.set(sessionId, { sessionId, users: new Map(), startedAt: new Date(), isActive: true });
-    } else {
-      const session = activeSessions.get(sessionId);
-      session.isActive = true;
-      session.startedAt = new Date();
-    }
+    
+    let session = await Session.findOneAndUpdate(
+      { sessionId },
+      { $set: { isActive: true, startedAt: new Date() } },
+      { upsert: true, new: true }
+    );
 
-    const session = activeSessions.get(sessionId);
+    let recordingActive = false;
     try {
       const resourceId = await acquireRecording(sessionId);
-      session.recordingResourceId = resourceId;
       const recordingData = await startRecording(sessionId, resourceId);
-      session.recordingSid = recordingData.sid;
-      session.recordingActive = true;
+      
+      await Session.updateOne(
+        { sessionId },
+        { $set: { recordingResourceId: resourceId, recordingSid: recordingData.sid, recordingActive: true } }
+      );
+      recordingActive = true;
     } catch (err) {
       console.warn('⚠️ Auto-recording failed:', err.message);
     }
 
-    res.status(200).json({ success: true, sessionId, startedAt: session.startedAt, recordingActive: session.recordingActive });
+    res.status(200).json({ 
+      success: true, 
+      sessionId, 
+      startedAt: session.startedAt, 
+      recordingActive 
+    });
   } catch (error) {
     next(error);
   }
@@ -92,32 +101,38 @@ exports.startSession = async (req, res, next) => {
 exports.stopSession = async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
-    const session = activeSessions.get(sessionId);
+    const session = await Session.findOne({ sessionId });
     if (!session) return res.status(404).json({ error: 'Session not found' });
 
-    session.isActive = false;
-    session.stoppedAt = new Date();
+    await Session.updateOne(
+      { sessionId },
+      { $set: { isActive: false, stoppedAt: new Date(), recordingActive: false } }
+    );
 
     if (session.recordingActive && session.recordingSid) {
       try {
         await stopRecording(sessionId, session.recordingResourceId, session.recordingSid, 'mix');
-        session.recordingActive = false;
       } catch (err) {
         console.warn('⚠️ Auto-recording stop failed:', err.message);
       }
     }
 
-    res.status(200).json({ success: true, sessionId, stoppedAt: session.stoppedAt });
+    res.status(200).json({ success: true, sessionId, stoppedAt: new Date() });
   } catch (error) {
     next(error);
   }
 };
 
-exports.getSessionStatus = (req, res) => {
+exports.getSessionStatus = async (req, res) => {
   const { id: sessionId } = req.params;
-  const session = activeSessions.get(sessionId);
+  const session = await Session.findOne({ sessionId }).lean();
   if (!session) return res.json({ sessionId, isActive: false, users: 0 });
-  res.json({ sessionId, isActive: session.isActive, startedAt: session.startedAt, users: session.users.size });
+  res.json({ 
+    sessionId, 
+    isActive: session.isActive, 
+    startedAt: session.startedAt, 
+    users: session.users.length 
+  });
 };
 
 exports.recordSpeakingEvent = async (req, res, next) => {

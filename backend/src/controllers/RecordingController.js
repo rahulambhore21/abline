@@ -38,14 +38,11 @@ async function initializeRecordingsStorage() {
 function recordingExists(recording) {
   if (!recording) return false;
   const url = recording.url || '';
-  const isInternalUrl = url.includes(PUBLIC_URL) || url.includes('/recordings/download/');
-  if (!isInternalUrl && (url.includes('s3') || url.includes('amazonaws') || url.startsWith('http'))) {
+  // Recordings are now strictly cloud-based (S3)
+  if (url.includes('s3') || url.includes('amazonaws') || url.startsWith('http')) {
     return true;
   }
-  const filename = recording.filename;
-  if (!filename) return false;
-  const filePath = path.join(__dirname, '../../recordings', filename);
-  return fs.existsSync(filePath);
+  return false;
 }
 
 exports.startRecording = async (req, res, next) => {
@@ -168,20 +165,18 @@ exports.saveRecording = async (req, res, next) => {
     const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const filename = `${recordingId}.m4a`;
     
-    // Upload to S3 instead of saving locally
+    // Upload to S3 (Strictly Global Persistence)
     let s3Url;
     try {
       s3Url = await uploadToS3(audioFile.data, filename, audioFile.mimetype);
-      console.log(`✅ Recording uploaded to S3: ${s3Url}`);
+      console.log(`✅ Recording persisted to S3: ${s3Url}`);
     } catch (uploadError) {
-      console.error('❌ S3 Upload failed, falling back to local storage:', uploadError.message);
-      
-      // Fallback to local storage if S3 fails
-      const recordingsDir = path.join(__dirname, '../../recordings');
-      if (!fs.existsSync(recordingsDir)) fs.mkdirSync(recordingsDir, { recursive: true });
-      const filePath = path.join(recordingsDir, filename);
-      await audioFile.mv(filePath);
-      s3Url = `${PUBLIC_URL}/recordings/download/${recordingId}`;
+      console.error('❌ S3 Persistence failed:', uploadError.message);
+      // We no longer fallback to local storage to ensure global persistence
+      return res.status(500).json({ 
+        error: 'Cloud storage persistence failed', 
+        message: uploadError.message 
+      });
     }
 
     const recordingData = {
@@ -212,7 +207,7 @@ exports.downloadRecording = async (req, res) => {
 
     if (!recording) return res.status(404).json({ error: 'Recording not found' });
 
-    // Handle S3 Streaming
+    // Handle S3 Streaming (Primary Global Method)
     if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
       try {
         const { getS3FileStream } = require('../services/S3Service');
@@ -222,19 +217,13 @@ exports.downloadRecording = async (req, res) => {
         res.setHeader('Accept-Ranges', 'bytes');
         return stream.pipe(res);
       } catch (s3Error) {
-        console.error('❌ S3 Streaming failed:', s3Error.message);
+        console.error('❌ S3 Streaming failed, attempting direct redirect:', s3Error.message);
         // Fallback to redirect if streaming fails
         return res.redirect(recording.url);
       }
     }
 
-    const filePath = path.join(__dirname, '../../recordings', recording.filename);
-    if (fs.existsSync(filePath)) {
-      res.setHeader('Content-Type', 'audio/mp4');
-      res.setHeader('Accept-Ranges', 'bytes');
-      return res.sendFile(filePath);
-    }
-    res.status(404).json({ error: 'Recording file not available' });
+    res.status(404).json({ error: 'Recording file not available on cloud storage' });
   } catch (error) {
     console.error('❌ Download error:', error.message);
     res.status(500).json({ error: 'Failed to download recording', message: error.message });
@@ -295,12 +284,9 @@ exports.webhook = async (req, res) => {
       console.log(`   ✅ Record created for ${recordingId}`);
     }
 
-    // Cleanup active recording if we've received files
-    if (activeRec) {
-       await ActiveRecording.deleteOne({ sid });
-       activeRecordings.delete(cname);
-       console.log(`   🧹 Cleaned up ActiveRecording for ${cname}`);
-    }
+    // Note: We no longer delete ActiveRecording here to allow for multi-part webhooks.
+    // Stale sessions are cleaned up automatically on backend restart (24h threshold).
+    console.log(`   ✅ Metadata preserved for potential multi-part webhook for ${cname}`);
 
     res.status(200).json({ status: 'processed' });
   } catch (error) {
