@@ -13,17 +13,27 @@ const regionMap = {
   16: 'eu-north-1',
 };
 
-// Prioritize AWS_REGION, then map RECORDING_REGION, then default to us-east-1
-const regionCode = process.env.RECORDING_REGION || '0';
-const awsRegion = process.env.AWS_REGION || regionMap[regionCode] || 'us-east-1';
+let _s3Client = null;
 
-const s3Client = new S3Client({
-  region: awsRegion,
-  credentials: {
-    accessKeyId: process.env.RECORDING_ACCESS_KEY,
-    secretAccessKey: process.env.RECORDING_SECRET_KEY,
-  },
-});
+function getS3Client() {
+  if (_s3Client) return _s3Client;
+
+  // Prioritize AWS_REGION, then map RECORDING_REGION, then default to us-east-1
+  const regionCode = process.env.RECORDING_REGION || '0';
+  const awsRegion = process.env.AWS_REGION || regionMap[regionCode] || 'us-east-1';
+  
+  console.log(`🛠️  Initializing S3 Client: Region=${awsRegion}`);
+
+  _s3Client = new S3Client({
+    region: awsRegion,
+    credentials: {
+      accessKeyId: process.env.RECORDING_ACCESS_KEY,
+      secretAccessKey: process.env.RECORDING_SECRET_KEY,
+    },
+  });
+  
+  return _s3Client;
+}
 
 
 
@@ -36,11 +46,10 @@ const s3Client = new S3Client({
  */
 async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
   const bucket = process.env.RECORDING_BUCKET;
-  if (!bucket) {
-    throw new Error('RECORDING_BUCKET is not defined in .env');
-  }
-
-  console.log(`📡 Preparing S3 upload: Bucket=${bucket}, Region=${awsRegion}, File=${filename}`);
+  if (!bucket) throw new Error('RECORDING_BUCKET is not defined in .env');
+  
+  const client = getS3Client();
+  console.log(`📡 Preparing S3 upload: Bucket=${bucket}, File=${filename}`);
 
   const command = new PutObjectCommand({
     Bucket: bucket,
@@ -50,11 +59,11 @@ async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
   });
 
   try {
-    await s3Client.send(command);
+    await client.send(command);
     
     // Construct the global S3 URL. 
-    // Regional format is more reliable across different AWS regions:
-    // https://bucket.s3.region.amazonaws.com/filename
+    const regionCode = process.env.RECORDING_REGION || '0';
+    const awsRegion = process.env.AWS_REGION || regionMap[regionCode] || 'us-east-1';
     const url = `https://${bucket}.s3.${awsRegion}.amazonaws.com/${filename}`;
     console.log(`✅ S3 Upload successful: ${url}`);
     return url;
@@ -80,7 +89,7 @@ async function getS3FileStream(filename) {
     Key: filename,
   });
 
-  const response = await s3Client.send(command);
+  const response = await getS3Client().send(command);
   return response.Body;
 }
 

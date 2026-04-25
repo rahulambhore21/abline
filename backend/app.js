@@ -73,7 +73,15 @@ const start = async () => {
 
     await recordingController.initializeRecordingsStorage();
 
-    
+    // Perform a startup S3 connectivity test
+    try {
+      const { uploadToS3 } = require('./src/services/S3Service');
+      const testFilename = `startup_test_${Date.now()}.txt`;
+      await uploadToS3(Buffer.from('connectivity test'), testFilename, 'text/plain');
+      console.log('✅ Global Persistence Test: S3 Connectivity Verified');
+    } catch (s3Error) {
+      console.error('⚠️ Global Persistence Test: S3 Connectivity Failed!', s3Error.message);
+    }
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
