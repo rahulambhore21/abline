@@ -22,9 +22,6 @@ async function initializeRecordingsStorage() {
   }
 }
 
-// Call initialization
-initializeRecordingsStorage();
-
 function saveRecordingsToDisk() {
   try {
     const data = Array.from(recordingsStorage.values());
@@ -227,3 +224,4 @@ exports.webhook = async (req, res) => {
 };
 
 exports.recordingsStorage = recordingsStorage;
+exports.initializeRecordingsStorage = initializeRecordingsStorage;

@@ -7,6 +7,7 @@ const morgan = require('morgan');
 const fileUpload = require('express-fileupload');
 const connectDB = require('./src/config/db');
 const errorHandler = require('./src/middleware/error');
+const { authMiddleware, allowRole } = require('./src/middleware/auth');
 
 const authRoutes = require('./src/routes/authRoutes');
 const recordingRoutes = require('./src/routes/recordingRoutes');
@@ -38,14 +39,14 @@ app.get('/agora/token', agoraController.getToken);
 // Session/Speaking events
 app.use('/', sessionRoutes); 
 
-// Auth compatibility
-app.get('/users', authController.listUsers);
+// Auth compatibility (Secure them same as modular routes)
+app.get('/users', authMiddleware, allowRole('host'), authController.listUsers);
 app.get('/host', authController.getHost);
 
 // Recording compatibility
 app.use('/recordings', recordingRoutes); 
-app.post('/start-recording', recordingController.startRecording);
-app.post('/stop-recording', recordingController.stopRecording);
+app.post('/start-recording', authMiddleware, allowRole('host'), recordingController.startRecording);
+app.post('/stop-recording', authMiddleware, allowRole('host'), recordingController.stopRecording);
 // -----------------------------------------------------------------
 
 // Global Error Handler
@@ -55,6 +56,10 @@ app.use(errorHandler);
 const start = async () => {
   try {
     await connectDB();
+    
+    // Initialize recording storage after DB is connected
+    await recordingController.initializeRecordingsStorage();
+    
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
