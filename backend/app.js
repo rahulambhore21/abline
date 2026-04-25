@@ -11,6 +11,9 @@ const errorHandler = require('./src/middleware/error');
 const authRoutes = require('./src/routes/authRoutes');
 const recordingRoutes = require('./src/routes/recordingRoutes');
 const sessionRoutes = require('./src/routes/sessionRoutes');
+const agoraController = require('./src/controllers/AgoraController');
+const authController = require('./src/controllers/AuthController');
+const recordingController = require('./src/controllers/RecordingController');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,12 +26,27 @@ app.use(morgan('dev'));
 app.use(express.json());
 app.use(fileUpload());
 
-// Routes
+// --- MODULAR ROUTES ---
 app.use('/auth', authRoutes);
 app.use('/recording', recordingRoutes);
 app.use('/session', sessionRoutes);
-// Compatibility for old paths
+
+// --- AGORA ROUTES ---
+app.get('/agora/token', agoraController.getToken);
+
+// --- LEGACY COMPATIBILITY ROUTES (Root level paths used by older frontend) ---
+// Session/Speaking events
 app.use('/', sessionRoutes); 
+
+// Auth compatibility
+app.get('/users', authController.listUsers);
+app.get('/host', authController.getHost);
+
+// Recording compatibility
+app.use('/recordings', recordingRoutes); 
+app.post('/start-recording', recordingController.startRecording);
+app.post('/stop-recording', recordingController.stopRecording);
+// -----------------------------------------------------------------
 
 // Global Error Handler
 app.use(errorHandler);
