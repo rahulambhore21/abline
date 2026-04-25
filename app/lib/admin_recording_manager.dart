@@ -109,14 +109,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
     }
   }
 
-  void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-      ),
-    );
-  }
+  // _showSnackBar was unreferenced
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +203,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF00FF41).withOpacity(0.15),
+                color: const Color(0xFF00FF41).withValues(alpha: 0.15),
                 border: Border.all(color: const Color(0xFF00FF41), width: 2),
                 borderRadius: BorderRadius.circular(8),
               ),
@@ -411,8 +404,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    Text(
-                                      'User: ${recordings.isNotEmpty ? (recordings.first.username ?? shortUserId) : shortUserId}',
+                                      Text(
+                                        'User: ${recordings.isNotEmpty ? recordings.first.username : shortUserId}',
                                       style: const TextStyle(
                                         color: Colors.white,
                                         fontWeight: FontWeight.bold,

@@ -262,7 +262,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                                   ),
                                 ),
                               );
-                            }).toList(),
+                            }),
                           ],
                         ),
                       ),

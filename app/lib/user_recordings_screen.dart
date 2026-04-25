@@ -82,15 +82,17 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
 
         // Show a subtle message if some recordings were removed
         if (verified < (data['total'] ?? 0)) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                '🗑️ Removed ${(data['total'] ?? 0) - verified} orphaned recordings',
+          if (mounted && context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  '🗑️ Removed ${(data['total'] ?? 0) - verified} orphaned recordings',
+                ),
+                backgroundColor: Colors.orange.shade700,
+                duration: const Duration(seconds: 3),
               ),
-              backgroundColor: Colors.orange.shade700,
-              duration: const Duration(seconds: 3),
-            ),
-          );
+            );
+          }
         }
       } else {
         setState(() {

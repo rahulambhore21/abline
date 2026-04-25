@@ -190,8 +190,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Future<void> _handleExit(BuildContext context) async {
     // Show a small overlay to prevent interaction while leaving
@@ -220,9 +221,9 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
     try {
       await _ctrl.leaveChannel();
     } catch (e) {
-      print('Error during leave: $e');
+      debugPrint('Error during leave: $e');
     } finally {
-      if (mounted) {
+      if (mounted && context.mounted) {
         // Pop the loading dialog
         Navigator.of(context, rootNavigator: true).pop();
         // Pop the VoiceCallScreen back to the dashboard/home

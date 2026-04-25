@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
-import 'app_config.dart';
 
 /// UserManagementDialog allows hosts to create new users
 class UserManagementDialog extends StatefulWidget {

@@ -28,7 +28,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
   String? _currentPlayingRecordingId;
   
   // ✅ NEW: Track which recordings exist on the server
-  Map<String, bool> _recordingExistenceCache = {};
+  final Map<String, bool> _recordingExistenceCache = {};
   bool _isVerifyingRecordings = false;
 
   @override
@@ -92,7 +92,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
           .timeout(const Duration(seconds: 5));
 
       final exists = response.statusCode == 200;
-      print(
+      debugPrint(
           '${exists ? '✅' : '❌'} Recording ${exists ? 'exists' : 'NOT FOUND'} (HTTP ${response.statusCode})');
       
       // Update cache
@@ -104,7 +104,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
       
       return exists;
     } catch (e) {
-      print('⚠️ Could not verify recording: $e');
+      debugPrint('⚠️ Could not verify recording: $e');
       // If we can't verify, assume it might still exist
       return true;
     }
@@ -129,18 +129,21 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
       await session.setActive(true);
 
       // ✅ NEW: Verify recording exists first
-      print('🎵 Attempting to play recording: ${recording.id}');
+      debugPrint('🎵 Attempting to play recording: ${recording.id}');
       final exists = await _verifyRecordingExists(recording);
 
+      if (!mounted) return;
       if (!exists) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-                '❌ Recording file not found on server. It may have been deleted.'),
-            backgroundColor: Colors.red,
-            duration: Duration(seconds: 5),
-          ),
-        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                  '❌ Recording file not found on server. It may have been deleted.'),
+              backgroundColor: Colors.red,
+              duration: Duration(seconds: 5),
+            ),
+          );
+        }
         return;
       }
 
@@ -161,32 +164,34 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
 
       // Add token as query parameter for better compatibility with audio players
       final urlWithToken = '${recording.url}?token=$token';
-      print('🎵 === PLAYING RECORDING ===');
-      print('📝 Recording ID: ${recording.id}');
-      print('📝 Original URL: ${recording.url}');
-      print('🔗 URL with token: $urlWithToken');
-      print('📝 Filename: ${recording.filename}');
-      print('⏱️  Duration: ${recording.durationMs}ms');
-      print('👤 User ID: ${recording.userId}');
-      print('🎙️  Session ID: ${recording.sessionId}');
-      print('========================');
+      debugPrint('🎵 === PLAYING RECORDING ===');
+      debugPrint('📝 Recording ID: ${recording.id}');
+      debugPrint('📝 Original URL: ${recording.url}');
+      debugPrint('🔗 URL with token: $urlWithToken');
+      debugPrint('📝 Filename: ${recording.filename}');
+      debugPrint('⏱️  Duration: ${recording.durationMs}ms');
+      debugPrint('👤 User ID: ${recording.userId}');
+      debugPrint('🎙️  Session ID: ${recording.sessionId}');
+      debugPrint('========================');
 
       // Load and play the audio
       await _audioPlayer.setUrl(urlWithToken);
       await _audioPlayer.play();
     } catch (e) {
-      print('❌ Error playing recording: $e');
-      print('   Stack trace: ${StackTrace.current}');
+      debugPrint('❌ Error playing recording: $e');
+      debugPrint('   Stack trace: ${StackTrace.current}');
       setState(() {
         _currentPlayingRecordingId = null;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error playing audio: $e'),
-          backgroundColor: Colors.red,
-          duration: const Duration(seconds: 5),
-        ),
-      );
+      if (mounted && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error playing audio: $e'),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
     }
   }
 
@@ -269,7 +274,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
         }
         grouped[dateString]!.add(recording);
       } catch (e) {
-        print('Error parsing date: ${recording.recordedAt}');
+        debugPrint('Error parsing date: ${recording.recordedAt}');
       }
     }
 
@@ -369,7 +374,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
                             Text(
                               'Duration: $durationString',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
+                                color: Colors.white.withValues(alpha: 0.6),
                                 fontSize: 12,
                               ),
                             ),
@@ -391,7 +396,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
                   ),
                 ),
               );
-            }).toList(),
+            }),
             const SizedBox(height: 8),
           ],
         );

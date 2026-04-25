@@ -354,7 +354,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
           ),
           const SizedBox(height: 8),
-          Text(
+          const Text(
             'System statistics and monitoring',
             style: TextStyle(
               color: Colors.white70,
@@ -429,7 +429,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
+                  const Text(
                     'Call Status',
                     style: TextStyle(
                       color: Colors.white70,
@@ -770,7 +770,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           const SizedBox(height: 8),
           Text(
             title,
-            style: TextStyle(
+            style: const TextStyle(
               color: Colors.white70,
               fontSize: 14,
               fontWeight: FontWeight.w500,
