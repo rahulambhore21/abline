@@ -8,25 +8,18 @@ const { uploadToS3 } = require('../services/S3Service');
 
 const PUBLIC_URL = process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud';
 
-// In-memory storage with disk persistence helpers (moved from app.js)
-const recordingsStorage = new Map();
-const RECORDINGS_METADATA_FILE = path.join(__dirname, '../../.recordings-metadata.json');
+// Removed in-memory recordingsStorage Map as MongoDB is the source of truth
 
 async function initializeRecordingsStorage() {
   try {
     console.log('🔄 Initializing recordings storage from database...');
     const recordings = await Recording.find().lean();
-    recordingsStorage.clear(); // Ensure we start fresh
-    recordings.forEach(r => {
-      recordingsStorage.set(r.recordingId, r);
-    });
-
+    
     // Also initialize active recording sessions
     const recordingService = require('../services/RecordingService');
     await recordingService.initializeActiveRecordings();
-
     
-    console.log(`✅ Loaded ${recordingsStorage.size} recordings from database into memory storage`);
+    console.log(`✅ Recording system initialized. Database has ${recordings.length} records.`);
 
     
     // Log a few IDs for verification
@@ -40,14 +33,7 @@ async function initializeRecordingsStorage() {
 }
 
 
-function saveRecordingsToDisk() {
-  try {
-    const data = Array.from(recordingsStorage.values());
-    fs.writeFileSync(RECORDINGS_METADATA_FILE, JSON.stringify(data, null, 2), 'utf8');
-  } catch (e) {
-    console.error('⚠️ Error saving recordings to disk:', e.message);
-  }
-}
+// Redundant functions removed (saveRecordingsToDisk)
 
 function recordingExists(recording) {
   if (!recording) return false;
@@ -210,8 +196,7 @@ exports.saveRecording = async (req, res, next) => {
     };
 
     const recording = await Recording.create(recordingData);
-    recordingsStorage.set(recordingId, recordingData);
-    saveRecordingsToDisk();
+    // Removed local cache and disk persistence
 
     res.status(201).json({ success: true, recordingId, url: recording.url, recordedAt: recording.recordedAt });
   } catch (error) {
@@ -223,15 +208,7 @@ exports.saveRecording = async (req, res, next) => {
 exports.downloadRecording = async (req, res) => {
   try {
     const { recordingId } = req.params;
-    let recording = recordingsStorage.get(recordingId);
-    
-    if (!recording) {
-      console.log(`🔍 Recording ${recordingId} not in cache, checking database...`);
-      recording = await Recording.findOne({ recordingId }).lean();
-      if (recording) {
-        recordingsStorage.set(recordingId, recording);
-      }
-    }
+    const recording = await Recording.findOne({ recordingId }).lean();
 
     if (!recording) return res.status(404).json({ error: 'Recording not found' });
 
@@ -303,8 +280,8 @@ exports.webhook = async (req, res) => {
       const recordingId = sid ? `${sid}_${filename}` : `rec_${Date.now()}_${filename}`;
       const bucket = process.env.RECORDING_BUCKET;
       
-      // Use regional URL for better compatibility if needed, but keeping current format
-      const s3Url = bucket ? `https://${bucket}.s3.amazonaws.com/${filename}` : '';
+      const awsRegion = process.env.AWS_REGION || 'eu-north-1';
+      const s3Url = bucket ? `https://${bucket}.s3.${awsRegion}.amazonaws.com/${filename}` : '';
 
       await Recording.create({
         recordingId,
@@ -333,5 +310,4 @@ exports.webhook = async (req, res) => {
 };
 
 
-exports.recordingsStorage = recordingsStorage;
 exports.initializeRecordingsStorage = initializeRecordingsStorage;

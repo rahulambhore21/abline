@@ -40,22 +40,28 @@ async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
     throw new Error('RECORDING_BUCKET is not defined in .env');
   }
 
+  console.log(`📡 Preparing S3 upload: Bucket=${bucket}, Region=${awsRegion}, File=${filename}`);
+
   const command = new PutObjectCommand({
     Bucket: bucket,
     Key: filename,
     Body: fileContent,
     ContentType: contentType,
-    // Note: Adjust ACL if needed, or use IAM policies for public access if required
-    // ACL: 'public-read', 
   });
 
-  await s3Client.send(command);
-
-  // Construct the S3 URL. 
-  // Standard format: https://bucket-name.s3.region.amazonaws.com/key
-  // Or for Agora-style buckets: https://bucket-name.s3.amazonaws.com/key
-  const region = process.env.AWS_REGION || 'us-east-1';
-  return `https://${bucket}.s3.amazonaws.com/${filename}`;
+  try {
+    await s3Client.send(command);
+    
+    // Construct the global S3 URL. 
+    // Regional format is more reliable across different AWS regions:
+    // https://bucket.s3.region.amazonaws.com/filename
+    const url = `https://${bucket}.s3.${awsRegion}.amazonaws.com/${filename}`;
+    console.log(`✅ S3 Upload successful: ${url}`);
+    return url;
+  } catch (error) {
+    console.error(`❌ S3 client.send failed: ${error.message}`);
+    throw error;
+  }
 }
 
 /**
