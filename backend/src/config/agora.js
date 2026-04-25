@@ -1,9 +1,11 @@
 const { RtcTokenBuilder, RtcRole } = require('agora-access-token');
 
-const AGORA_APP_ID = process.env.AGORA_APP_ID;
-const AGORA_APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE;
-const AGORA_CUSTOMER_ID = process.env.AGORA_CUSTOMER_ID;
-const AGORA_CUSTOMER_SECRET = process.env.AGORA_CUSTOMER_SECRET;
+const config = require('./index');
+
+const AGORA_APP_ID = config.agora.appId;
+const AGORA_APP_CERTIFICATE = config.agora.appCertificate;
+const AGORA_CUSTOMER_ID = config.agora.customerId;
+const AGORA_CUSTOMER_SECRET = config.agora.customerSecret;
 
 const TOKEN_TTL = 3600;
 

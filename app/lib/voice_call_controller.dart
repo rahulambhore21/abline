@@ -20,7 +20,7 @@ import 'recording.dart';
 class VoiceCallController extends ChangeNotifier {
   // ─── Config ───────────────────────────────────────────────────────────────
   final String channelName = 'test_room';
-  final String agoraAppId = '1400d886612b4896986d7db16b0bbc44';
+  final String agoraAppId = AppConfig.agoraAppId;
   final String backendUrl = AppConfig.backendBaseUrl;
 
   // ─── Dependencies ─────────────────────────────────────────────────────────

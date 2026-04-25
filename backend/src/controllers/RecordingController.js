@@ -6,7 +6,9 @@ const fs = require('fs');
 const { uploadToS3 } = require('../services/S3Service');
 
 
-const PUBLIC_URL = process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud';
+const config = require('../config');
+
+const PUBLIC_URL = config.publicUrl;
 
 // Removed in-memory recordingsStorage Map as MongoDB is the source of truth
 
@@ -267,9 +269,7 @@ exports.webhook = async (req, res) => {
       const userId = activeRec?.userId || (uidMatch ? Number(uidMatch[1]) : Number(uid));
       const username = activeRec?.username || 'Unknown';
       const recordingId = sid ? `${sid}_${filename}` : `rec_${Date.now()}_${filename}`;
-      const bucket = process.env.RECORDING_BUCKET;
-      
-      const awsRegion = process.env.AWS_REGION || 'eu-north-1';
+      const { bucket, awsRegion } = config.storage;
       const s3Url = bucket ? `https://${bucket}.s3.${awsRegion}.amazonaws.com/${filename}` : '';
 
       await Recording.create({

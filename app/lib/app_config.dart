@@ -8,7 +8,11 @@ class AppConfig {
   static const String backendUrl = String.fromEnvironment(
     'BACKEND_URL',
     defaultValue: 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud',
-    // defaultValue: 'https://guided-practical-sole-latter.trycloudflare.com',
+  );
+
+  static const String agoraAppId = String.fromEnvironment(
+    'AGORA_APP_ID',
+    defaultValue: '1400d886612b4896986d7db16b0bbc44',
   );
 
   /// Normalized base URL with no trailing slash.
@@ -16,7 +20,6 @@ class AppConfig {
     if (backendUrl.endsWith('/')) {
       return backendUrl.substring(0, backendUrl.length - 1);
     }
-     
     return backendUrl;
   }
 }
