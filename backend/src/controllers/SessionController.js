@@ -1,4 +1,9 @@
 const Session = require('../models/Session');
+const SpeakingEvent = require('../models/SpeakingEvent');
+const User = require('../models/User');
+const mongoose = require('mongoose');
+const { acquireRecording, startRecording, stopRecording } = require('../services/RecordingService');
+
 // activeSessions Map removed in favor of MongoDB persistence
 const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
@@ -171,4 +176,4 @@ exports.healthCheck = (req, res) => {
   res.json({ status: 'ok', mongo: { connected: mongoose.connection.readyState === 1 } });
 };
 
-exports.activeSessions = activeSessions;
+// State is now managed via Session model in MongoDB
