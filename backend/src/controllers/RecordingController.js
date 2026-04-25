@@ -10,6 +10,21 @@ const PUBLIC_URL = process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.a
 const recordingsStorage = new Map();
 const RECORDINGS_METADATA_FILE = path.join(__dirname, '../../.recordings-metadata.json');
 
+async function initializeRecordingsStorage() {
+  try {
+    const recordings = await Recording.find().lean();
+    recordings.forEach(r => {
+      recordingsStorage.set(r.recordingId, r);
+    });
+    console.log(`✅ Loaded ${recordingsStorage.size} recordings from database into memory storage`);
+  } catch (err) {
+    console.error('⚠️ Failed to initialize recordings storage:', err.message);
+  }
+}
+
+// Call initialization
+initializeRecordingsStorage();
+
 function saveRecordingsToDisk() {
   try {
     const data = Array.from(recordingsStorage.values());
