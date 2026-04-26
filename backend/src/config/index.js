@@ -1,7 +1,7 @@
 const path = require('path');
 
 // Load environment variables early
-require('dotenv').config({ path: path.join(__dirname, '../../.env') });
+require('dotenv').config({ path: path.join(__dirname, '../../.env'), override: true });
 
 const regionMap = {
   0: 'us-east-1',
@@ -14,6 +14,12 @@ const regionMap = {
   13: 'eu-central-1',
   16: 'eu-north-1',
 };
+
+console.log('📝 Environment Debug:', {
+  RECORDING_REGION: process.env.RECORDING_REGION,
+  AWS_REGION: process.env.AWS_REGION,
+  mapped: regionMap[process.env.RECORDING_REGION]
+});
 
 const config = {
   // Server Config
@@ -32,15 +38,18 @@ const config = {
     tokenTtl: 3600
   },
 
-  // S3 / Storage Config
+// S3 / Storage Config
   storage: {
     vendor: Number(process.env.RECORDING_VENDOR || 2),
     region: Number(process.env.RECORDING_REGION || 16),
     bucket: process.env.RECORDING_BUCKET,
     accessKey: process.env.RECORDING_ACCESS_KEY,
     secretKey: process.env.RECORDING_SECRET_KEY,
-    awsRegion: regionMap[process.env.RECORDING_REGION] || process.env.AWS_REGION || 'eu-north-1'
+    // Prioritize explicit AWS_REGION from .env, then map from Agora region number, fallback to eu-north-1
+    awsRegion: (process.env.AWS_REGION || regionMap[String(process.env.RECORDING_REGION || '').trim()] || 'eu-north-1').trim()
   }
 };
+
+console.log('✅ Config Loaded: Storage Region =', config.storage.awsRegion);
 
 module.exports = config;
