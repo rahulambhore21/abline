@@ -16,17 +16,36 @@ exports.addUserToSession = async (req, res, next) => {
       return res.status(400).json({ error: 'Missing required fields: userId, username' });
     }
 
+    // Find current session status
+    let session = await Session.findOne({ sessionId });
+
+    // ✅ ENFORCEMENT: Only allow joining if session is active or if the joiner is the host
+    const isHost = role === 'host';
+    
+    if (isHost) {
+      // If host joins, ensure the session is marked active and recording starts
+      const result = await startSessionInternal(sessionId);
+      session = result.session;
+      console.log(`🎙️ Session ${sessionId} activated by Host join.`);
+    } else if (!session || !session.isActive) {
+      return res.status(403).json({ 
+        error: 'Session not active', 
+        message: 'The admin has not joined the call yet.' 
+      });
+    }
+
     // Use findOneAndUpdate with upsert to manage session state in DB
-    const session = await Session.findOneAndUpdate(
+    session = await Session.findOneAndUpdate(
       { sessionId },
       { 
-        $set: { isActive: true }, // Ensure session is active if someone is joining
         $addToSet: { 
           users: { userId, username, role: role || 'user', isSpeaking: false } 
         } 
       },
       { upsert: true, new: true }
     );
+
+
 
     // If host is joining, update hostUid
     if (role === 'host') {
@@ -68,29 +87,36 @@ exports.getSessionUsers = async (req, res) => {
   });
 };
 
+/**
+ * Internal logic to start a session and its associated recording
+ */
+async function startSessionInternal(sessionId) {
+  let session = await Session.findOneAndUpdate(
+    { sessionId },
+    { $set: { isActive: true, startedAt: new Date() } },
+    { upsert: true, new: true }
+  );
+
+  let recordingActive = false;
+  try {
+    const resourceId = await acquireRecording(sessionId);
+    const recordingData = await startRecording(sessionId, resourceId);
+    
+    await Session.updateOne(
+      { sessionId },
+      { $set: { recordingResourceId: resourceId, recordingSid: recordingData.sid, recordingActive: true } }
+    );
+    recordingActive = true;
+  } catch (err) {
+    console.warn(`⚠️ Auto-recording failed for session ${sessionId}:`, err.message);
+  }
+  return { session, recordingActive };
+}
+
 exports.startSession = async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
-    
-    let session = await Session.findOneAndUpdate(
-      { sessionId },
-      { $set: { isActive: true, startedAt: new Date() } },
-      { upsert: true, new: true }
-    );
-
-    let recordingActive = false;
-    try {
-      const resourceId = await acquireRecording(sessionId);
-      const recordingData = await startRecording(sessionId, resourceId);
-      
-      await Session.updateOne(
-        { sessionId },
-        { $set: { recordingResourceId: resourceId, recordingSid: recordingData.sid, recordingActive: true } }
-      );
-      recordingActive = true;
-    } catch (err) {
-      console.warn('⚠️ Auto-recording failed:', err.message);
-    }
+    const { session, recordingActive } = await startSessionInternal(sessionId);
 
     res.status(200).json({ 
       success: true, 
@@ -102,6 +128,7 @@ exports.startSession = async (req, res, next) => {
     next(error);
   }
 };
+
 
 exports.stopSession = async (req, res, next) => {
   try {

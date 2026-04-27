@@ -72,6 +72,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
         setState(() => _totalSpeakingEvents = data['total'] ?? 0);
       }
 
+      // ✅ NEW: Fetch current session status
+      await _checkSessionStatus();
+
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() {
@@ -311,6 +314,26 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
+  /// ✅ NEW: Check if the session is currently active on the server
+  Future<void> _checkSessionStatus() async {
+    try {
+      _currentSessionId = 'test_room';
+      final response = await http.get(
+        Uri.parse('${AppConfig.backendBaseUrl}/session/$_currentSessionId/status'),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _isHostLive = data['isActive'] ?? false;
+          _activeUsersInSession = data['userCount'] ?? 0;
+        });
+      }
+    } catch (e) {
+      print('❌ Error checking session status: $e');
+    }
+  }
+
   /// ✅ NEW: Join the call as host (participate in conversation)
   Future<void> _joinCall() async {
     try {
@@ -448,20 +471,54 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   ),
                   const SizedBox(height: 20),
 
-                  // ✅ Join Call button - starts session automatically when clicked
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      onPressed: _joinCall,
-                      icon: const Icon(Icons.phone),
-                      label: const Text('Join Call as Host'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                      ),
-                    ),
+                  // ✅ Session Controls
+                  Row(
+                    children: [
+                      if (!_isHostLive)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _joinCall,
+                            icon: const Icon(Icons.bolt),
+                            label: const Text('Go Live / Join Call'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      if (_isHostLive)
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _stopCallSession,
+                            icon: const Icon(Icons.stop),
+                            label: const Text('Stop Session'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      if (_isHostLive) ...[
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            onPressed: _joinCall,
+                            icon: const Icon(Icons.phone),
+                            label: const Text('Join Call'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
+
+
                   const SizedBox(height: 24),
 
                   // ✅ NEW: Recording Status Section

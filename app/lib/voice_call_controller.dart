@@ -253,6 +253,8 @@ class VoiceCallController extends ChangeNotifier {
           await joinChannel();
         }
         if (wasActive && !active && isConnected) {
+          debugPrint('🚪 Host ended call. Disconnecting...');
+          leaveChannel(); // ✅ NEW: Force leave locally
           onHostLeft?.call();
         }
       }
@@ -528,16 +530,15 @@ class VoiceCallController extends ChangeNotifier {
             await _applySelectiveAudioSubscription(rUid);
           }
         }
-      } else if (response.statusCode == 409) {
-        // ✅ NEW: Handle duplicate username error
+      } else if (response.statusCode == 403 || response.statusCode == 409) {
+        // ✅ NEW: Handle Session Not Active (403) or Duplicate Name (409)
         final errorData = jsonDecode(response.body);
-        final errorMsg = errorData['message'] ?? 'Username already active in this channel';
+        final errorMsg = errorData['message'] ?? 'Not authorized to join';
         
-        // Leave the channel since we are not authorized to be here with this name
         await agoraEngine.leaveChannel();
         isConnected = false;
         isJoining = false;
-        statusMessage = 'Name already active';
+        statusMessage = response.statusCode == 403 ? 'Call not started' : 'Name active';
         notifyListeners();
         
         onError?.call(errorMsg);
@@ -640,9 +641,14 @@ class VoiceCallController extends ChangeNotifier {
           '${dir.path}/recording_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
       
       await audioRecorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc),
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          autoGain: true, // ✅ NEW: Boosts quiet voices
+        ),
+
         path: filePath,
       );
+
       
       isRecordingAudio = true;
       recordingStartTime = DateTime.now();

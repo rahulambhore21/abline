@@ -116,21 +116,23 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
       // ✅ NEW: Force audio to Speaker mode with higher volume profile
       final session = await AudioSession.instance;
       await session.configure(AudioSessionConfiguration(
-        // Playback category is generally louder than playAndRecord
         avAudioSessionCategory: AVAudioSessionCategory.playback, 
         avAudioSessionCategoryOptions: AVAudioSessionCategoryOptions.defaultToSpeaker | 
-                                       AVAudioSessionCategoryOptions.allowBluetooth,
-        // moviePlayback mode is optimized for high-volume speaker output
+                                       AVAudioSessionCategoryOptions.allowBluetooth |
+                                       AVAudioSessionCategoryOptions.duckOthers, // ✅ NEW: Dims other sounds
         avAudioSessionMode: AVAudioSessionMode.moviePlayback, 
         androidAudioAttributes: const AndroidAudioAttributes(
           contentType: AndroidAudioContentType.music,
-          usage: AndroidAudioUsage.media,
+          usage: AndroidAudioUsage.media, // ✅ Uses the media/speaker stream
         ),
         androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
         androidWillPauseWhenDucked: true,
       ));
 
       await session.setActive(true);
+      // Give the system a moment to switch routes
+      await Future.delayed(const Duration(milliseconds: 200));
+
 
       // Ensure player volume is at maximum
       await _audioPlayer.setVolume(1.0);
