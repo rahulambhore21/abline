@@ -63,6 +63,8 @@ class VoiceCallController extends ChangeNotifier {
   Timer? _sessionStatusTimer;
   Timer? _recordingStatusTimer;
   Timer? _usernamesFetchTimer;
+  Directory? _appDocDir;
+
 
   static const int _tokenValidDuration = 3300;
   static const int _sessionPollInterval = 5;
@@ -73,6 +75,7 @@ class VoiceCallController extends ChangeNotifier {
   Future<void> init() async {
     authService = AuthService(backendUrl: backendUrl);
     audioRecorder = AudioRecorder();
+    _appDocDir = await getApplicationDocumentsDirectory();
     speakerTracker = SpeakerTracker(
       backendUrl: backendUrl,
       sessionId: channelName,
@@ -190,6 +193,10 @@ class VoiceCallController extends ChangeNotifier {
           }
           speakerTracker.tick(now: now);
         },
+        onTokenPrivilegeWillExpire: (RtcConnection connection, String token) {
+          debugPrint('🎟️ Token will expire soon. Renewing...');
+          _renewToken();
+        },
       ),
     );
   }
@@ -290,8 +297,8 @@ class VoiceCallController extends ChangeNotifier {
 
   // ─── Token ────────────────────────────────────────────────────────────────
 
-  Future<void> _fetchAgoraToken() async {
-    if (agoraToken != null && tokenFetchedAt != null) {
+  Future<void> _fetchAgoraToken({bool force = false}) async {
+    if (!force && agoraToken != null && tokenFetchedAt != null) {
       final age = DateTime.now().difference(tokenFetchedAt!).inSeconds;
       if (age < _tokenValidDuration) return;
     }
@@ -311,6 +318,18 @@ class VoiceCallController extends ChangeNotifier {
       notifyListeners();
     } else {
       throw Exception('Failed to get token');
+    }
+  }
+
+  Future<void> _renewToken() async {
+    try {
+      await _fetchAgoraToken(force: true);
+      if (agoraToken != null) {
+        await agoraEngine.renewToken(agoraToken!);
+        debugPrint('✅ Token renewed successfully');
+      }
+    } catch (e) {
+      debugPrint('❌ Failed to renew token: $e');
     }
   }
 
@@ -386,18 +405,35 @@ class VoiceCallController extends ChangeNotifier {
 
   Future<void> unmute() async {
     if (!isConnected) return;
-    await agoraEngine.muteLocalAudioStream(false);
-    if (!isHost && !isRecordingAudio) await startAudioRecording();
+    if (!isMuted) return; // Already unmuted
+    
     isMuted = false;
     notifyListeners();
+    
+    // Fire and forget (mostly) to avoid lag, but handle errors
+    unawaited(agoraEngine.muteLocalAudioStream(false).catchError((e) {
+      print("Error unmuting: $e");
+    }));
+    
+    if (!isHost && !isRecordingAudio) {
+      unawaited(startAudioRecording());
+    }
   }
 
   Future<void> mute() async {
     if (!isConnected) return;
-    await agoraEngine.muteLocalAudioStream(true);
-    if (!isHost && isRecordingAudio) await stopAudioRecording();
+    if (isMuted) return; // Already muted
+    
     isMuted = true;
     notifyListeners();
+    
+    unawaited(agoraEngine.muteLocalAudioStream(true).catchError((e) {
+      print("Error muting: $e");
+    }));
+    
+    if (!isHost && isRecordingAudio) {
+      unawaited(stopAudioRecording());
+    }
   }
 
   Future<void> toggleMute() async =>
@@ -587,18 +623,18 @@ class VoiceCallController extends ChangeNotifier {
 
   Future<void> startAudioRecording() async {
     try {
-      if (await audioRecorder.hasPermission()) {
-        final dir = await getApplicationDocumentsDirectory();
-        final filePath =
-            '${dir.path}/recording_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
-        await audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: filePath,
-        );
-        isRecordingAudio = true;
-        recordingStartTime = DateTime.now();
-        notifyListeners();
-      }
+      final dir = _appDocDir ?? await getApplicationDocumentsDirectory();
+      final filePath =
+          '${dir.path}/recording_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      
+      await audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc),
+        path: filePath,
+      );
+      
+      isRecordingAudio = true;
+      recordingStartTime = DateTime.now();
+      notifyListeners();
     } catch (e) {
       onError?.call('Failed to start recording: $e');
     }
@@ -657,7 +693,7 @@ class VoiceCallController extends ChangeNotifier {
           durationMs: durationMs,
         ));
         notifyListeners();
-        onSuccess?.call('✅ Recording saved! 🎙️');
+        // Removed notification as per user request: onSuccess?.call('✅ Recording saved! 🎙️');
       }
 
       if (audioFile.existsSync()) audioFile.deleteSync();

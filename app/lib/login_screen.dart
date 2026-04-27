@@ -130,11 +130,24 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
+              // Logo
+              Image.asset(
+                'assets/logo.png',
+                height: 120,
+                width: 120,
+                fit: BoxFit.contain,
+              ),
+              const SizedBox(height: 24),
+              
               // Title
               Text(
-                _isRegistering ? 'Create Host Account' : 'Welcome to Agora Voice',
-                style: Theme.of(context).textTheme.headlineMedium,
+                _isRegistering ? 'Create Host Account' : 'Welcome to Talk Circle',
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.blue.shade900,
+                ),
               ),
+
               const SizedBox(height: 8),
               Text(
                 _isRegistering

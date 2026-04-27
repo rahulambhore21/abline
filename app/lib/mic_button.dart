@@ -42,14 +42,14 @@ class MicButton extends StatelessWidget {
     return Stack(
       alignment: Alignment.topRight,
       children: [
-        GestureDetector(
-          onTap: isHost && isConnected ? () => onTap() : null,
-          onTapDown:
-              !isHost && isConnected ? (_) => onTapDown() : null,
-          onTapUp: !isHost && isConnected ? (_) => onTapUp() : null,
-          onTapCancel:
-              !isHost && isConnected ? () => onTapCancel() : null,
-          child: Container(
+        Listener(
+          onPointerDown: !isHost && isConnected ? (_) => onTapDown() : null,
+          onPointerUp: !isHost && isConnected ? (_) => onTapUp() : null,
+          onPointerCancel: !isHost && isConnected ? (_) => onTapCancel() : null,
+          child: GestureDetector(
+            onTap: isHost && isConnected ? () => onTap() : null,
+            child: Container(
+
             width: 140,
             height: 140,
             decoration: BoxDecoration(
@@ -93,6 +93,8 @@ class MicButton extends StatelessWidget {
               ),
             ),
           ),
+        ),
+
         ),
 
         // Red recording badge

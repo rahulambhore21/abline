@@ -140,9 +140,10 @@ exports.listRecordings = async (req, res, next) => {
 
 
 
-      const uId = String(r.userId);
-      if (!byUser[uId]) byUser[uId] = [];
-      byUser[uId].push(formatted);
+      const userKey = r.username || 'Unknown';
+      if (!byUser[userKey]) byUser[userKey] = [];
+      byUser[userKey].push(formatted);
+
       
       return formatted;
     });
