@@ -3,7 +3,8 @@ const Recording = require('../models/Recording');
 const User = require('../models/User');
 const path = require('path');
 const fs = require('fs');
-const { uploadToS3 } = require('../services/S3Service');
+const { uploadToS3, getPresignedUrl } = require('../services/S3Service');
+
 
 
 const config = require('../config');
@@ -161,25 +162,21 @@ exports.listRecordings = async (req, res, next) => {
 
 exports.saveRecording = async (req, res, next) => {
   try {
-    const { userId, sessionId, durationMs, username } = req.body;
+    const { userId, sessionId, durationMs, username, url, filename: providedFilename } = req.body;
     const audioFile = req.files?.audioFile;
-    if (!userId || !sessionId || !audioFile) return res.status(400).json({ error: 'Missing required fields' });
-
-    const recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const filename = `${recordingId}.m4a`;
     
-    // Upload to S3 (Strictly Global Persistence)
-    let s3Url;
-    try {
-      s3Url = await uploadToS3(audioFile.data, filename, audioFile.mimetype);
-      console.log(`✅ Recording persisted to S3: ${s3Url}`);
-    } catch (uploadError) {
-      console.error('❌ S3 Persistence failed:', uploadError.message);
-      // We no longer fallback to local storage to ensure global persistence
-      return res.status(500).json({ 
-        error: 'Cloud storage persistence failed', 
-        message: uploadError.message 
-      });
+    if (!userId || !sessionId) return res.status(400).json({ error: 'Missing userId or sessionId' });
+
+    let finalUrl = url;
+    let recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    let filename = providedFilename || `${recordingId}.m4a`;
+
+    if (audioFile) {
+      // Legacy path: File sent to backend
+      finalUrl = await uploadToS3(audioFile.data, filename, audioFile.mimetype);
+      console.log(`✅ Recording persisted to S3 via backend: ${finalUrl}`);
+    } else if (!url) {
+      return res.status(400).json({ error: 'Missing audioFile or direct S3 url' });
     }
 
     const recordingData = {
@@ -188,15 +185,25 @@ exports.saveRecording = async (req, res, next) => {
       username: username || 'Unknown',
       sessionId,
       filename,
-      url: s3Url,
+      url: finalUrl,
       recordedAt: new Date(),
       durationMs: Number(durationMs) || 0,
     };
 
     const recording = await Recording.create(recordingData);
-    // Removed local cache and disk persistence
-
     res.status(201).json({ success: true, recordingId, url: recording.url, recordedAt: recording.recordedAt });
+  } catch (error) {
+    next(error);
+  }
+};
+
+exports.requestUploadUrl = async (req, res, next) => {
+  try {
+    const { filename, contentType } = req.body;
+    if (!filename) return res.status(400).json({ error: 'Missing filename' });
+
+    const uploadUrl = await getPresignedUrl(filename, contentType);
+    res.json({ uploadUrl });
   } catch (error) {
     next(error);
   }

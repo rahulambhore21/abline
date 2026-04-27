@@ -6,6 +6,8 @@ const { authMiddleware, allowRole } = require('../middleware/auth');
 router.post('/start', authMiddleware, allowRole('host'), recordingController.startRecording);
 router.post('/stop', authMiddleware, allowRole('host'), recordingController.stopRecording);
 router.post('/save', authMiddleware, recordingController.saveRecording); // Flutter app uploads
+router.post('/request-upload-url', authMiddleware, recordingController.requestUploadUrl);
+
 
 router.post('/webhook', recordingController.webhook);
 router.get('/', authMiddleware, recordingController.listRecordings);

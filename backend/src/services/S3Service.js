@@ -1,5 +1,7 @@
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const path = require('path');
+
 
 const config = require('../config');
 
@@ -79,8 +81,30 @@ async function getS3FileStream(filename) {
   return response.Body;
 }
 
+/**
+ * Generates a pre-signed URL for direct upload to S3
+ * @param {string} filename 
+ * @param {string} contentType 
+ * @returns {Promise<string>}
+ */
+async function getPresignedUrl(filename, contentType = 'audio/mp4') {
+  const bucket = process.env.RECORDING_BUCKET;
+  const client = getS3Client();
+
+  const command = new PutObjectCommand({
+    Bucket: bucket,
+    Key: filename,
+    ContentType: contentType,
+  });
+
+  // URL expires in 15 minutes
+  return await getSignedUrl(client, command, { expiresIn: 900 });
+}
+
 module.exports = {
   uploadToS3,
   getS3FileStream,
+  getPresignedUrl,
 };
+
 

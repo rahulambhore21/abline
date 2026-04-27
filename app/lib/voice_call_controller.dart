@@ -123,8 +123,20 @@ class VoiceCallController extends ChangeNotifier {
     statusMessage = 'Initializing Agora...';
     notifyListeners();
     agoraEngine = createAgoraRtcEngine();
-    await agoraEngine.initialize(RtcEngineContext(appId: agoraAppId));
+    await agoraEngine.initialize(RtcEngineContext(
+      appId: agoraAppId,
+      channelProfile: ChannelProfileType.channelProfileCommunication,
+    ));
+    
+    // ✅ OPTIMIZATION: Use speech-optimized profile to save data
+    await agoraEngine.setAudioProfile(
+      profile: AudioProfileType.audioProfileSpeechStandard,
+      scenario: AudioScenarioType.audioScenarioDefault,
+
+    );
+    
     await agoraEngine.enableAudio();
+
     await agoraEngine.enableAudioVolumeIndication(
       interval: 200,
       smooth: 3,
@@ -660,35 +672,69 @@ class VoiceCallController extends ChangeNotifier {
   Future<void> _uploadRecording(File audioFile, int durationMs) async {
     try {
       final token = await authService.getToken();
-      final request =
-          http.MultipartRequest('POST', Uri.parse('$backendUrl/recordings/save'));
-      
-      if (token != null) {
-        request.headers['Authorization'] = 'Bearer $token';
+      if (token == null) return;
+
+      // 1. ✅ Request a Pre-signed URL (Optimization: Direct to S3)
+      final filename = 'rec_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final responseUrl = await http.post(
+        Uri.parse('$backendUrl/recordings/request-upload-url'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'filename': filename,
+          'contentType': 'audio/mp4',
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      if (responseUrl.statusCode != 200) {
+        throw Exception('Failed to get upload URL: ${responseUrl.statusCode}');
       }
       
-      request.files
-          .add(await http.MultipartFile.fromPath('audioFile', audioFile.path));
+      final uploadUrl = jsonDecode(responseUrl.body)['uploadUrl'];
 
-      request.fields['userId'] = uid.toString();
-      request.fields['username'] = username; // ✅ NEW: Pass username
-      request.fields['sessionId'] = channelName;
-      request.fields['durationMs'] = durationMs.toString();
+      // 2. ✅ Upload DIRECTLY to S3
+      final fileBytes = await audioFile.readAsBytes();
+      final uploadResponse = await http.put(
+        Uri.parse(uploadUrl),
+        headers: {
+          'Content-Type': 'audio/mp4',
+        },
+        body: fileBytes,
+      ).timeout(const Duration(seconds: 60));
 
-      final response =
-          await request.send().timeout(const Duration(seconds: 60));
+      if (uploadResponse.statusCode != 200) {
+        throw Exception('S3 Direct Upload failed: ${uploadResponse.statusCode}');
+      }
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        final body = await response.stream.bytesToString();
-        final data = jsonDecode(body);
+      // 3. ✅ Notify backend to save the record
+      final s3Url = uploadUrl.split('?').first;
+      final saveResponse = await http.post(
+        Uri.parse('$backendUrl/recordings/save'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'userId': uid,
+          'username': username,
+          'sessionId': channelName,
+          'durationMs': durationMs,
+          'url': s3Url,
+          'filename': filename,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      if (saveResponse.statusCode == 200 || saveResponse.statusCode == 201) {
+        final data = jsonDecode(saveResponse.body);
         userRecordings.add(Recording(
-          id: data['recordingId'] ??
-              'rec_${DateTime.now().millisecondsSinceEpoch}',
+          id: data['recordingId'] ?? 'rec_${DateTime.now().millisecondsSinceEpoch}',
           userId: uid,
-          username: username, // ✅ NEW
+          username: username,
           sessionId: channelName,
-          filename: audioFile.path.split('/').last,
-          url: data['url'] ?? audioFile.path,
+          filename: filename,
+          url: s3Url,
           recordedAt: DateTime.now().toIso8601String(),
           durationMs: durationMs,
         ));
@@ -701,6 +747,7 @@ class VoiceCallController extends ChangeNotifier {
       onError?.call('Upload error: $e');
     }
   }
+
 
   /// Callback set by the screen to show a success SnackBar.
   void Function(String)? onSuccess;
