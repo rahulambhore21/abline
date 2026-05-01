@@ -154,14 +154,17 @@ class _AdminScreenState extends State<AdminScreen>
           indicatorSize: TabBarIndicatorSize.label,
         ),
       ),
-      body: TabBarView(
-        controller: _tabController,
-        children: const [
-          AdminDashboard(),
-          AdminUsersManager(),
-          AdminRecordingManager(),
-        ],
+      body: SafeArea(
+        child: TabBarView(
+          controller: _tabController,
+          children: const [
+            AdminDashboard(),
+            AdminUsersManager(),
+            AdminRecordingManager(),
+          ],
+        ),
       ),
+
     );
   }
 }

@@ -104,20 +104,9 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
   Future<void> _deleteUser(String userId, String username) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Delete User'),
-        content: Text('Are you sure you want to delete user "$username"?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Delete'),
-          ),
-        ],
+      builder: (dialogContext) => _DeleteConfirmDialog(
+        username: username,
+        onSnackBar: (msg, isErr) => _showSnackBar(msg, isError: isErr),
       ),
     );
 
@@ -135,12 +124,25 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
   }
 
   void _showSnackBar(String message, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: isError ? Colors.red : Colors.green,
-      ),
-    );
+    if (!mounted) return;
+    try {
+      // Use findAncestorStateOfType instead of maybeOf to avoid registering a dependency.
+      // This prevents "InheritedElement.debugDeactivated: _dependents.isEmpty is not true"
+      // assertion failures when the widget is being unmounted.
+      final messenger = context.findAncestorStateOfType<ScaffoldMessengerState>();
+      if (messenger != null) {
+        messenger.hideCurrentSnackBar();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: isError ? Colors.red : Colors.green,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error showing snackbar: $e');
+    }
   }
 
   void _showCreateUserDialog() {
@@ -369,14 +371,6 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                     ),
                   ],
                   rows: _users.map((user) {
-                    final createdAt = user['createdAt'] as String?;
-                    final formattedDate = createdAt != null
-                        ? DateTime.parse(createdAt)
-                            .toString()
-                            .split('.')
-                            .first
-                        : 'N/A';
-
                     return DataRow(
                       cells: [
                         DataCell(
@@ -430,6 +424,82 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
           ],
         ],
       ),
+    );
+  }
+}
+
+/// Dedicated dialog to manage its own TextEditingController lifecycle
+class _DeleteConfirmDialog extends StatefulWidget {
+  final String username;
+  final Function(String, bool) onSnackBar;
+
+  const _DeleteConfirmDialog({
+    required this.username,
+    required this.onSnackBar,
+  });
+
+  @override
+  State<_DeleteConfirmDialog> createState() => _DeleteConfirmDialogState();
+}
+
+class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
+  final _pinController = TextEditingController();
+
+  @override
+  void dispose() {
+    _pinController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Confirm Deletion'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Are you sure you want to delete user "${widget.username}"?'),
+          const SizedBox(height: 20),
+          const Text(
+            'Enter Admin PIN to confirm:',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _pinController,
+            decoration: const InputDecoration(
+              hintText: 'Enter PIN',
+              border: OutlineInputBorder(),
+              prefixIcon: Icon(Icons.lock_outline, size: 20),
+              contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+            keyboardType: TextInputType.number,
+            obscureText: true,
+            autofocus: true,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            if (_pinController.text == AppConfig.adminDeletePin) {
+              Navigator.pop(context, true);
+            } else {
+              widget.onSnackBar('❌ Incorrect PIN. Action denied.', true);
+            }
+          },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+          ),
+          child: const Text('Delete User'),
+        ),
+      ],
     );
   }
 }

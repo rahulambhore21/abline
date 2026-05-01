@@ -492,6 +492,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 16),
+                      // ✅ Extra spacing for navigation bar
+                      SizedBox(height: MediaQuery.of(context).padding.bottom),
                     ],
                   ),
                 ),
@@ -500,6 +503,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+
     );
   }
 }

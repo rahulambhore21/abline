@@ -22,4 +22,7 @@ class AppConfig {
     }
     return backendUrl;
   }
+
+  /// PIN required for destructive administrative actions (like deleting users)
+  static const String adminDeletePin = '1234';
 }

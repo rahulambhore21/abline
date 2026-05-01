@@ -136,6 +136,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               isSessionActive: _ctrl.isSessionActive,
             ),
 
+
             // ─── Controls bar ─────────────────────────────────────────────
             CallControlsBar(
               isHost: _ctrl.isHost,
@@ -186,10 +187,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 usernames: _ctrl.usernames,
               ),
 
-            const SizedBox(height: 16),
+            // ✅ Bottom padding that adapts to system navigation bar
+            SizedBox(height: 16 + MediaQuery.of(context).padding.bottom),
           ],
         ),
       ),
+
     ),
   );
 }
