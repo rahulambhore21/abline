@@ -94,11 +94,13 @@ class _HomeScreenState extends State<HomeScreen> {
     print('  - Role: $role');
     print('  - Is Host: $isHost');
 
-    setState(() {
-      _loggedInUsername = username ?? 'User';
-      _isHost = isHost;
-      _isLoading = false; // Show UI immediately with what we have.
-    });
+    if (mounted) {
+      setState(() {
+        _loggedInUsername = username ?? 'User';
+        _isHost = isHost;
+        _isLoading = false; // Show UI immediately with what we have.
+      });
+    }
 
     // 2. Fetch the actual host's username from the backend (public endpoint).
     //    This runs after setState so the screen is already visible.

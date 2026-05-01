@@ -46,21 +46,27 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() {
-          _users = List<Map<String, dynamic>>.from(data['users'] ?? []);
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _users = List<Map<String, dynamic>>.from(data['users'] ?? []);
+            _isLoading = false;
+          });
+        }
       } else {
+        if (mounted) {
+          setState(() {
+            _error = 'Failed to load users';
+            _isLoading = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) {
         setState(() {
-          _error = 'Failed to load users';
+          _error = 'Error: $e';
           _isLoading = false;
         });
       }
-    } catch (e) {
-      setState(() {
-        _error = 'Error: $e';
-        _isLoading = false;
-      });
     }
   }
 

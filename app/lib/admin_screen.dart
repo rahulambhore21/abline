@@ -48,11 +48,13 @@ class _AdminScreenState extends State<AdminScreen>
         return;
       }
 
-      setState(() {
-        _username = username ?? 'Admin';
-        _isHost = isHost;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _username = username ?? 'Admin';
+          _isHost = isHost;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);

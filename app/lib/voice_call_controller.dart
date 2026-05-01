@@ -567,18 +567,22 @@ class VoiceCallController extends ChangeNotifier {
           .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final users = data['users'] as List;
+        final users = (data['users'] as List?) ?? [];
         final hUid = data['hostUid'];
 
         for (var user in users) {
-          final uId = user['userId'] is int
-              ? user['userId'] as int
-              : int.parse(user['userId'].toString());
-          usernames[uId] = user['username'] as String;
+          if (user is Map) {
+            final uId = user['userId'] is int
+                ? user['userId'] as int
+                : int.tryParse(user['userId']?.toString() ?? '') ?? 0;
+            if (uId != 0) {
+              usernames[uId] = user['username']?.toString() ?? 'Unknown';
+            }
+          }
         }
 
         if (hUid != null && hostUid == null) {
-          hostUid = hUid is int ? hUid : int.parse(hUid.toString());
+          hostUid = hUid is int ? hUid : int.tryParse(hUid.toString());
         }
         notifyListeners();
 
@@ -620,9 +624,9 @@ class VoiceCallController extends ChangeNotifier {
           .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final recordings = data['recordings'] as List;
+        final recordings = (data['recordings'] as List?) ?? [];
         isRecording =
-            recordings.any((rec) => rec['channelName'] == channelName);
+            recordings.any((rec) => rec is Map && rec['channelName'] == channelName);
         notifyListeners();
       }
     } catch (_) {

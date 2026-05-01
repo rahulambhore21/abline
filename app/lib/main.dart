@@ -67,7 +67,7 @@ class _RestartWidgetState extends State<RestartWidget> {
   }
 }
 
-class GlobalErrorScreen extends StatelessWidget {
+class GlobalErrorScreen extends StatefulWidget {
   final String error;
   final String stackTrace;
 
@@ -76,6 +76,13 @@ class GlobalErrorScreen extends StatelessWidget {
     required this.error,
     required this.stackTrace,
   });
+
+  @override
+  State<GlobalErrorScreen> createState() => _GlobalErrorScreenState();
+}
+
+class _GlobalErrorScreenState extends State<GlobalErrorScreen> {
+  bool _showDetails = false;
 
   @override
   Widget build(BuildContext context) {
@@ -88,71 +95,126 @@ class GlobalErrorScreen extends StatelessWidget {
           child: Material(
             color: const Color(0xFF1a1a1a),
             child: Center(
-              child: Container(
-                margin: const EdgeInsets.all(24),
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2a2a2a),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.bug_report, color: Colors.red, size: 64),
-                    const SizedBox(height: 16),
-                    const Text(
-                      'Application Error',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+              child: SingleChildScrollView(
+                child: Container(
+                  margin: const EdgeInsets.all(24),
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF2a2a2a),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.5),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      error,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(color: Colors.redAccent, fontSize: 16),
-                    ),
-                    const SizedBox(height: 24),
-                    const Text(
-                      'Technical Details:',
-                      style: TextStyle(color: Colors.white70, fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    Flexible(
-                      child: SingleChildScrollView(
-                        child: Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            stackTrace,
-                            style: const TextStyle(
-                              color: Colors.greenAccent,
-                              fontFamily: 'monospace',
-                              fontSize: 10,
+                    ],
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.warning_amber_rounded,
+                        color: Colors.orangeAccent,
+                        size: 72,
+                      ),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Oops! Something went wrong',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      const Text(
+                        'The application encountered an unexpected error. We apologize for the inconvenience.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white70,
+                          fontSize: 16,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+                      
+                      // Action Button
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            RestartWidget.restartApp(context);
+                          },
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('Restart Application'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 24),
-                    ElevatedButton(
-                      onPressed: () {
-                        // Use the restart widget to re-initialize the app
-                        RestartWidget.restartApp(context);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                      
+                      const SizedBox(height: 16),
+                      
+                      // Technical Details Toggle
+                      TextButton(
+                        onPressed: () {
+                          setState(() {
+                            _showDetails = !_showDetails;
+                          });
+                        },
+                        child: Text(
+                          _showDetails ? 'Hide Details' : 'Show Technical Details',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.5),
+                            fontSize: 13,
+                          ),
+                        ),
                       ),
-                      child: const Text('Restart Application'),
-                    ),
-                  ],
+                      
+                      if (_showDetails) ...[
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Error: ${widget.error}',
+                                style: const TextStyle(
+                                  color: Colors.redAccent,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const Divider(color: Colors.white10, height: 20),
+                              Text(
+                                widget.stackTrace,
+                                style: TextStyle(
+                                  color: Colors.greenAccent.withValues(alpha: 0.8),
+                                  fontFamily: 'monospace',
+                                  fontSize: 10,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),

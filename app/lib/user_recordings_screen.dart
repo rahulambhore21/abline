@@ -75,10 +75,12 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         final verified = data['verified'] ?? recordings.length;
         print('✅ Loaded $verified verified recordings out of ${data['total']}');
 
-        setState(() {
-          _recordings = recordings;
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _recordings = recordings;
+            _isLoading = false;
+          });
+        }
 
         // Show a subtle message if some recordings were removed
         if (verified < (data['total'] ?? 0)) {
@@ -95,17 +97,21 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
           }
         }
       } else {
-        setState(() {
-          _error = 'Failed to load recordings: ${response.statusCode}';
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _error = 'Failed to load recordings: ${response.statusCode}';
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       print('❌ Error loading recordings: $e');
-      setState(() {
-        _error = 'Error loading recordings: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = 'Error loading recordings: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
