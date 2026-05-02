@@ -100,11 +100,18 @@ exports.listRecordings = async (req, res, next) => {
     if (sessionId) filter.sessionId = sessionId;
 
     if (req.user.role !== 'host') {
-      filter.username = req.user.username;
-    } else if (userId) {
-      const numericUid = Number(userId);
-      if (!isNaN(numericUid)) filter.userId = numericUid;
-      else filter.username = userId;
+      // Users only see their own recordings, matched by username (case-insensitive)
+      filter.username = { $regex: new RegExp(`^${req.user.username}$`, 'i') };
+    } else {
+      // Admins can filter by userId (Agora UID) or username
+      if (userId) {
+        const numericUid = Number(userId);
+        if (!isNaN(numericUid)) {
+          filter.userId = numericUid;
+        } else {
+          filter.username = { $regex: new RegExp(`^${userId}$`, 'i') };
+        }
+      }
     }
 
     console.log(`🔍 Listing recordings with filter:`, JSON.stringify(filter));

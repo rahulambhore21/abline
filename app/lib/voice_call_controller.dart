@@ -13,6 +13,7 @@ import 'speaking_event.dart';
 import 'app_config.dart';
 import 'auth_service.dart';
 import 'recording.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 /// All mutable state for the voice call, extracted from [VoiceCallScreen].
 ///
@@ -390,6 +391,9 @@ class VoiceCallController extends ChangeNotifier {
 
       await agoraEngine.muteLocalAudioStream(true);
       isMuted = true;
+      
+      // ✅ NEW: Keep screen awake during call
+      WakelockPlus.enable();
     } catch (e) {
       statusMessage = 'Failed to connect - tap to retry';
       onError?.call('Failed to join: $e');
@@ -406,6 +410,10 @@ class VoiceCallController extends ChangeNotifier {
     isConnected = false;
     remoteUsers.clear();
     isMuted = true;
+    
+    // ✅ NEW: Allow screen to sleep after call
+    WakelockPlus.disable();
+    
     statusMessage = 'Disconnected';
     _stopRecordingStatusPolling();
     notifyListeners();
@@ -771,6 +779,7 @@ class VoiceCallController extends ChangeNotifier {
     _usernamesFetchTimer?.cancel();
     audioRecorder.dispose();
     speakerTracker.dispose();
+    WakelockPlus.disable(); // Ensure wakelock is off
     _leaveChannelAndDestroy();
     super.dispose();
   }

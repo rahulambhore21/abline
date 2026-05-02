@@ -58,6 +58,7 @@ dependencies:
 
   # Audio session management for speaker/earpiece routing
   audio_session: ^0.1.18
+  wakelock_plus: ^1.5.2
 
 dev_dependencies:
   flutter_test:

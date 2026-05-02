@@ -60,7 +60,7 @@ class ParticipantsTalkingPanel extends StatelessWidget {
                       final uid = entries[index].key;
                       final state = entries[index].value;
                       final name =
-                          usernames[uid] ?? 'User #$uid';
+                          usernames[uid] ?? 'Unknown User';
 
                       return Row(
                         children: [

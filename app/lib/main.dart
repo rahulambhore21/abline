@@ -226,8 +226,40 @@ class _GlobalErrorScreenState extends State<GlobalErrorScreen> {
 }
 
 
-class MyApp extends StatelessWidget {
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    
+    // If the app is moved to background (paused) or system-inactive
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      debugPrint('📱 App moved to background/inactive state: $state');
+      
+      // Force restart the app to ensure it doesn't continue running in background
+      // This will effectively "close" the current session and return to AuthWrapper
+      RestartWidget.restartApp(context);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {

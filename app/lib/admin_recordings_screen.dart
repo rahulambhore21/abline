@@ -24,14 +24,38 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
   late final String _backendUrl = AppConfig.backendBaseUrl;
 
   Map<String, List<Recording>> _recordingsByUser = {};
+  Map<String, List<Recording>> _filteredRecordingsByUser = {};
   bool _isLoading = true;
   String _error = '';
+  final _searchController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
     _authService = AuthService(backendUrl: _backendUrl);
     _loadAllRecordings();
+    _searchController.addListener(_filterRecordings);
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  void _filterRecordings() {
+    final query = _searchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredRecordingsByUser = _recordingsByUser;
+      } else {
+        _filteredRecordingsByUser = Map.fromEntries(
+          _recordingsByUser.entries.where(
+            (entry) => entry.key.toLowerCase().contains(query),
+          ),
+        );
+      }
+    });
   }
 
   /// Load all recordings for the session (admin view)
@@ -78,6 +102,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
 
         setState(() {
           _recordingsByUser = recordingsByUser;
+          _filteredRecordingsByUser = recordingsByUser;
           _isLoading = false;
         });
 
@@ -179,15 +204,33 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // ✅ Search Bar
+                            TextField(
+                              controller: _searchController,
+                              style: const TextStyle(color: Colors.white),
+                              decoration: InputDecoration(
+                                hintText: 'Search user name...',
+                                hintStyle: const TextStyle(color: Colors.white30),
+                                prefixIcon: const Icon(Icons.search, color: Colors.white30),
+                                filled: true,
+                                fillColor: const Color(0xFF3a3a3a),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  borderSide: BorderSide.none,
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                              ),
+                            ),
+                            const SizedBox(height: 20),
                             Text(
-                              'Total Members: ${_recordingsByUser.length}',
+                              'Total Members: ${_filteredRecordingsByUser.length}',
                               style: const TextStyle(
                                 color: Colors.white70,
                                 fontSize: 14,
                               ),
                             ),
                             const SizedBox(height: 16),
-                            ..._recordingsByUser.entries.map((entry) {
+                            ..._filteredRecordingsByUser.entries.map((entry) {
                               final username = entry.key;
                               final recordings = entry.value;
                               final totalDuration = recordings.fold<int>(
