@@ -2,26 +2,33 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// AuthService handles JWT token management, login, registration, and API calls
 class AuthService {
   final String backendUrl;
+  final String? storageKeyPrefix;
+  final _storage = const FlutterSecureStorage();
 
-  // ✅ OPTIMIZATION: Cache frequently accessed values to avoid SharedPreferences reads
+  // ✅ OPTIMIZATION: Cache frequently accessed values to avoid storage reads
   String? _cachedToken;
   String? _cachedRole;
   String? _cachedUserId;
   String? _cachedUsername;
   bool _cacheInitialized = false;
 
-  AuthService({required this.backendUrl});
+  AuthService({required this.backendUrl, this.storageKeyPrefix});
 
   /// ✅ OPTIMIZATION: Initialize cache from SharedPreferences on first access
   Future<void> _initializeCache() async {
     if (_cacheInitialized) return;
 
     final prefs = await SharedPreferences.getInstance();
-    _cachedToken = prefs.getString('auth_token');
+    
+    // Tokens are stored in SecureStorage
+    _cachedToken = await _storage.read(key: 'auth_token');
+    
+    // Other metadata stays in SharedPreferences for fast non-secure access
     _cachedRole = prefs.getString('user_role');
     _cachedUserId = prefs.getString('user_id');
     _cachedUsername = prefs.getString('username');
@@ -264,7 +271,7 @@ class AuthService {
   /// Logout - clear all stored auth data
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
+    await _storage.delete(key: 'auth_token'); // Securely remove token
     await prefs.remove('user_role');
     await prefs.remove('user_id');
     await prefs.remove('username');
@@ -298,10 +305,9 @@ class AuthService {
     );
   }
 
-  /// Save token to local storage
+  /// Save token to secure storage
   Future<void> _saveToken(String token) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
+    await _storage.write(key: 'auth_token', value: token);
     _cachedToken = token; // ✅ OPTIMIZATION: Update cache
   }
 

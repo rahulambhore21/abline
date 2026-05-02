@@ -1,4 +1,4 @@
-const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const path = require('path');
 
@@ -101,10 +101,34 @@ async function getPresignedUrl(filename, contentType = 'audio/mp4') {
   return await getSignedUrl(client, command, { expiresIn: 900 });
 }
 
+/**
+ * Deletes a file from S3
+ * @param {string} filename 
+ * @returns {Promise<void>}
+ */
+async function deleteFromS3(filename) {
+  const bucket = process.env.RECORDING_BUCKET;
+  if (!bucket) throw new Error('RECORDING_BUCKET is not defined in .env');
+
+  const command = new DeleteObjectCommand({
+    Bucket: bucket,
+    Key: filename,
+  });
+
+  try {
+    await getS3Client().send(command);
+    console.log(`✅ S3 Delete successful: ${filename}`);
+  } catch (error) {
+    console.error(`❌ S3 client.send (delete) failed for ${filename}: ${error.message}`);
+    throw error;
+  }
+}
+
 module.exports = {
   uploadToS3,
   getS3FileStream,
   getPresignedUrl,
+  deleteFromS3,
 };
 
 

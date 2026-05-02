@@ -11,6 +11,7 @@ const fileUpload = require('express-fileupload');
 const connectDB = require('./src/config/db');
 const errorHandler = require('./src/middleware/error');
 const { authMiddleware, allowRole } = require('./src/middleware/auth');
+const { apiLimiter, authLimiter } = require('./src/middleware/rateLimiter');
 
 const authRoutes = require('./src/routes/authRoutes');
 const recordingRoutes = require('./src/routes/recordingRoutes');
@@ -31,25 +32,25 @@ app.use(express.json());
 app.use(fileUpload());
 
 // --- MODULAR ROUTES ---
-app.use('/auth', authRoutes);
-app.use('/recording', recordingRoutes);
-app.use('/session', sessionRoutes);
+app.use('/auth', authLimiter, authRoutes);
+app.use('/recording', apiLimiter, recordingRoutes);
+app.use('/session', apiLimiter, sessionRoutes);
 
 // --- AGORA ROUTES ---
-app.get('/agora/token', agoraController.getToken);
+app.get('/agora/token', apiLimiter, agoraController.getToken);
 
 // --- LEGACY COMPATIBILITY ROUTES (Root level paths used by older frontend) ---
 // Session/Speaking events
-app.use('/', sessionRoutes); 
+app.use('/', apiLimiter, sessionRoutes); 
 
 // Auth compatibility (Secure them same as modular routes)
-app.get('/users', authMiddleware, allowRole('host'), authController.listUsers);
-app.get('/host', authController.getHost);
+app.get('/users', apiLimiter, authMiddleware, allowRole('host'), authController.listUsers);
+app.get('/host', apiLimiter, authController.getHost);
 
 // Recording compatibility
-app.use('/recordings', recordingRoutes); 
-app.post('/start-recording', authMiddleware, allowRole('host'), recordingController.startRecording);
-app.post('/stop-recording', authMiddleware, allowRole('host'), recordingController.stopRecording);
+app.use('/recordings', apiLimiter, recordingRoutes); 
+app.post('/start-recording', apiLimiter, authMiddleware, allowRole('host'), recordingController.startRecording);
+app.post('/stop-recording', apiLimiter, authMiddleware, allowRole('host'), recordingController.stopRecording);
 // -----------------------------------------------------------------
 
 // Global Error Handler
@@ -72,6 +73,10 @@ const start = async () => {
     });
 
     await recordingController.initializeRecordingsStorage();
+
+    // Initialize automatic cleanup of old recordings (7 days threshold)
+    const { initCleanupTask } = require('./src/services/CleanupService');
+    initCleanupTask();
 
     // Perform a startup S3 connectivity test
     try {
