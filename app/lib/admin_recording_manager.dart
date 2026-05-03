@@ -18,7 +18,6 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   late AuthService _authService;
   List<Map<String, dynamic>> _activeRecordings = [];
   Map<String, List<Recording>> _recordingsByUser = {}; // ✅ FIXED: Use String key for userId
-  List<Recording> _allSessionRecordings = [];
   bool _isLoading = true;
   String _error = '';
 
@@ -59,13 +58,13 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
           },
         );
 
-        print('📡 Session recordings response: ${userRecordingsResponse.statusCode}');
-        print('📊 Response body: ${userRecordingsResponse.body}');
+        debugPrint('📡 Session recordings response: ${userRecordingsResponse.statusCode}');
+        debugPrint('📊 Response body: ${userRecordingsResponse.body}');
 
         if (userRecordingsResponse.statusCode == 200) {
           final data = jsonDecode(userRecordingsResponse.body);
-          print('📝 Total recordings in response: ${data['total']}');
-          print('📝 Recording count by user: ${data['byUser']?.keys.length ?? 0}');
+          debugPrint('📝 Total recordings in response: ${data['total']}');
+          debugPrint('📝 Recording count by user: ${data['byUser']?.keys.length ?? 0}');
 
           final recordingsList = (data['recordings'] as List?)
               ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
@@ -82,20 +81,19 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
           ) ?? {};
 
           setState(() {
-            _allSessionRecordings = recordingsList;
             _recordingsByUser = byUser;
           });
 
-          print('✅ Loaded ${recordingsList.length} session recordings');
-          print('✅ Users with recordings: ${byUser.keys.toList()}');
-          print('📋 Sample recording: ${recordingsList.isNotEmpty ? recordingsList.first.url : "None"}');
+          debugPrint('✅ Loaded ${recordingsList.length} session recordings');
+          debugPrint('✅ Users with recordings: ${byUser.keys.toList()}');
+          debugPrint('📋 Sample recording: ${recordingsList.isNotEmpty ? recordingsList.first.url : "None"}');
         } else {
-          print('⚠️ Session recordings response: ${userRecordingsResponse.statusCode}');
-          print('📄 Body: ${userRecordingsResponse.body}');
+          debugPrint('⚠️ Session recordings response: ${userRecordingsResponse.statusCode}');
+          debugPrint('📄 Body: ${userRecordingsResponse.body}');
         }
       } catch (e) {
-        print('❌ Error loading user recordings: $e');
-        print('   Stack: ${StackTrace.current}');
+        debugPrint('❌ Error loading user recordings: $e');
+        debugPrint('   Stack: ${StackTrace.current}');
         // Don't treat this as a fatal error
       }
 
@@ -105,7 +103,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         _error = 'Error loading recording data: $e';
         _isLoading = false;
       });
-      print('❌ Error in _loadRecordingData: $e');
+      debugPrint('❌ Error in _loadRecordingData: $e');
     }
   }
 
@@ -382,7 +380,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                 width: 48,
                                 height: 48,
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF00FF41).withOpacity(0.2),
+                                  color: const Color(0xFF00FF41).withValues(alpha: 0.2),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Center(

@@ -49,7 +49,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
       // ✅ NEW: Enable verification to filter out non-existent recordings
       // ✅ FIXED: Pass userId to ensure segregation
       final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true';
-      print('🌐 Fetching recordings from: $url');
+      debugPrint('🌐 Fetching recordings from: $url');
 
       final token = await _authService.getToken();
       
@@ -63,8 +63,8 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
           )
           .timeout(const Duration(seconds: 10));
 
-      print('📡 Response status: ${response.statusCode}');
-      print('📄 Response body: ${response.body}');
+      debugPrint('📡 Response status: ${response.statusCode}');
+      debugPrint('📄 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -73,7 +73,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
             .toList() ?? [];
 
         final verified = (data['verified'] ?? recordings.length) as int;
-        print('✅ Loaded $verified verified recordings out of ${data['total']}');
+        debugPrint('✅ Loaded $verified verified recordings out of ${data['total']}');
 
         if (mounted) {
           setState(() {
@@ -105,7 +105,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         }
       }
     } catch (e) {
-      print('❌ Error loading recordings: $e');
+      debugPrint('❌ Error loading recordings: $e');
       if (mounted) {
         setState(() {
           _error = 'Error loading recordings: $e';
@@ -145,7 +145,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
                       Icon(
                         Icons.error_outline,
                         size: 64,
-                        color: Colors.red.withOpacity(0.5),
+                        color: Colors.red.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(

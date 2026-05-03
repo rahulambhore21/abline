@@ -151,7 +151,7 @@ class SpeakerTracker {
         userState.isSpeaking = true;
         userState.lastStartTime = at;
         stateChanged = true;
-        print('🎤 User $uid started speaking at $at');
+        debugPrint('🎤 User $uid started speaking at $at');
       }
     } else {
       // Speaking → Silent
@@ -168,10 +168,10 @@ class SpeakerTracker {
             endTime: at,
           );
 
-          print(viaTimeout
+          debugPrint(viaTimeout
               ? '🛑 User $uid stopped speaking (timeout) at $at'
               : '🛑 User $uid stopped speaking at $at');
-          print('📊 Event: $event');
+          debugPrint('📊 Event: $event');
 
           onSpeakingEventComplete?.call(event);
           _sendEventToBackend(event);
@@ -202,12 +202,12 @@ class SpeakerTracker {
 
 
       if (response.statusCode == 201 || response.statusCode == 200) {
-        print('✅ Event sent successfully: ${event.userId}');
+        debugPrint('✅ Event sent successfully: ${event.userId}');
       } else {
-        print('⚠️ Backend returned ${response.statusCode}: ${response.body}');
+        debugPrint('⚠️ Backend returned ${response.statusCode}: ${response.body}');
       }
     } catch (e) {
-      print('❌ Error sending event to backend: $e');
+      debugPrint('❌ Error sending event to backend: $e');
     }
   }
 

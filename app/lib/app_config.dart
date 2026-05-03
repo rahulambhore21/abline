@@ -1,7 +1,7 @@
 /// Central place to configure the backend base URL for the Flutter app.
 ///
 /// You can override this at build/run time with:
-/// flutter run --dart-define=BACKEND_URL=http://<your-ip>:5000
+/// flutter run --dart-define=BACKEND_URL=http://your-ip:5000
 ///
 /// In production, set BACKEND_URL to your HTTPS API.
 class AppConfig {

@@ -334,12 +334,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       debugPrint('🎤 Host joining call as participant...');
       if (!mounted) return;
       
-      Navigator.push(
+      unawaited(Navigator.push(
         context,
         MaterialPageRoute<void>(
           builder: (context) => const VoiceCallScreen(),
         ),
-      );
+      ));
     } catch (e) {
       debugPrint('❌ Error joining call: $e');
       if (!mounted) return;

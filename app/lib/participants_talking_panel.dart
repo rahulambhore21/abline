@@ -53,7 +53,7 @@ class ParticipantsTalkingPanel extends StatelessWidget {
 
                   return ListView.separated(
                     itemCount: entries.length,
-                    separatorBuilder: (_, __) =>
+                    separatorBuilder: (_, _) =>
                         const Divider(color: Colors.white10),
                     itemBuilder: (context, index) {
                       final uid = entries[index].key;
@@ -97,7 +97,7 @@ class ParticipantsTalkingPanel extends StatelessWidget {
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.green.withOpacity(0.2),
+                                color: Colors.green.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: const Text(
@@ -136,7 +136,7 @@ class _SpeakingDot extends StatelessWidget {
         boxShadow: isSpeaking
             ? [
                 BoxShadow(
-                  color: Colors.green.withOpacity(0.5),
+                  color: Colors.green.withValues(alpha: 0.5),
                   blurRadius: 8,
                 )
               ]

@@ -80,9 +80,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
 
 
   /// ✅ NEW: Check if recording exists (cached)
-  bool _recordingExists(String recordingId) {
-    return _recordingExistenceCache[recordingId] ?? true; // Default to true if not yet verified
-  }
+  bool _recordingExists(String recordingId) => _recordingExistenceCache[recordingId] ?? true;
 
   /// ✅ NEW: Verify if a recording exists (with feedback/logging)
   Future<bool> _verifyRecordingExists(Recording recording) async {
@@ -341,11 +339,11 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
                   decoration: BoxDecoration(
                     color: isCurrentlyPlaying
                         ? Colors.blue.shade700
-                        : Colors.white.withOpacity(0.05),
+                        : Colors.white.withValues(alpha: 0.05),
                     border: Border.all(
                       color: isCurrentlyPlaying
                           ? Colors.blue.shade500
-                          : Colors.white.withOpacity(0.1),
+                          : Colors.white.withValues(alpha: 0.1),
                     ),
                     borderRadius: BorderRadius.circular(8),
                   ),

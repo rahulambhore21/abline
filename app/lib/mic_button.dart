@@ -55,7 +55,7 @@ class MicButton extends StatelessWidget {
               shape: BoxShape.circle,
               boxShadow: [
                 BoxShadow(
-                  color: _activeColor.withOpacity(0.6),
+                  color: _activeColor.withValues(alpha: 0.6),
                   blurRadius: 30,
                   spreadRadius: 5,
                 ),
@@ -65,7 +65,7 @@ class MicButton extends StatelessWidget {
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
-                  color: _activeColor.withOpacity(0.4),
+                  color: _activeColor.withValues(alpha: 0.4),
                   width: 3,
                 ),
               ),
@@ -105,7 +105,7 @@ class MicButton extends StatelessWidget {
               color: Colors.red,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.red.withOpacity(0.8),
+                  color: Colors.red.withValues(alpha: 0.8),
                   blurRadius: 8,
                   spreadRadius: 2,
                 ),

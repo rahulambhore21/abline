@@ -72,7 +72,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      print('Error checking session status: $e');
+      debugPrint('Error checking session status: $e');
       // Keep offline status on error
       if (mounted) {
         setState(() {
@@ -89,10 +89,10 @@ class _HomeScreenState extends State<HomeScreen> {
     final role = await _authService.getRole();
     final isHost = await _authService.isHost();
 
-    print('🔍 User Info:');
-    print('  - Username: $username');
-    print('  - Role: $role');
-    print('  - Is Host: $isHost');
+    debugPrint('🔍 User Info:');
+    debugPrint('  - Username: $username');
+    debugPrint('  - Role: $role');
+    debugPrint('  - Is Host: $isHost');
 
     if (mounted) {
       setState(() {
@@ -124,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      print('Error fetching host name: $e');
+      debugPrint('Error fetching host name: $e');
       if (mounted) {
         setState(() {
           _hostName = 'Unavailable';
@@ -281,8 +281,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               decoration: BoxDecoration(
                                 color: _isHostOnline
-                                    ? Colors.green.withOpacity(0.2)
-                                    : Colors.red.withOpacity(0.2), // ✅ Red when offline
+                                    ? Colors.green.withValues(alpha: 0.2)
+                                    : Colors.red.withValues(alpha: 0.2), // ✅ Red when offline
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Row(
@@ -367,9 +367,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Container(
                           padding: const EdgeInsets.all(16),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                           ),
                           child: Row(
                             children: [
@@ -439,9 +439,9 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
-                              color: Colors.blue.withOpacity(0.15),
+                              color: Colors.blue.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.blue.withOpacity(0.3)),
+                              border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
                             ),
                             child: Row(
                               children: [

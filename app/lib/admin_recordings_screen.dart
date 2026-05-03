@@ -77,7 +77,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
 
       final url =
           '$_backendUrl/recordings/session/${widget.sessionId}?verify=true';
-      print('🌐 Fetching all session recordings from: $url');
+      debugPrint('🌐 Fetching all session recordings from: $url');
 
       final response = await http.get(
         Uri.parse(url),
@@ -86,7 +86,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
         },
       ).timeout(const Duration(seconds: 10));
 
-      print('📡 Response status: ${response.statusCode}');
+      debugPrint('📡 Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -106,7 +106,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
           _isLoading = false;
         });
 
-        print('✅ Loaded recordings for ${recordingsByUser.length} users');
+        debugPrint('✅ Loaded recordings for ${recordingsByUser.length} users');
       } else if (response.statusCode == 401) {
         setState(() {
           _error = 'Unauthorized - Admin access required';
@@ -119,7 +119,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
         });
       }
     } catch (e) {
-      print('❌ Error loading recordings: $e');
+      debugPrint('❌ Error loading recordings: $e');
       setState(() {
         _error = 'Error loading recordings: $e';
         _isLoading = false;
