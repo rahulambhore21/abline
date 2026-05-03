@@ -64,7 +64,6 @@ class VoiceCallController extends ChangeNotifier {
 
   // ─── Internal ─────────────────────────────────────────────────────────────
   bool _checkingSession = false;
-  bool _checkingRecordingStatus = false;
   Timer? _sessionStatusTimer;
   Timer? _recordingStatusTimer;
   Timer? _usernamesFetchTimer;
@@ -74,7 +73,6 @@ class VoiceCallController extends ChangeNotifier {
 
   static const int _tokenValidDuration = 3300;
   static const int _sessionPollInterval = 5;
-  static const int _usernameFetchInterval = 10;
 
   // ─── Initialisation ───────────────────────────────────────────────────────
 
@@ -180,12 +178,10 @@ class VoiceCallController extends ChangeNotifier {
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           speakerTracker.start();
           _registerUserInSession(connection.localUid ?? 0);
-          _startRecordingStatusPolling();
           uid = connection.localUid ?? 0;
           isConnected = true;
           statusMessage = 'Connected';
           notifyListeners();
-          _startFetchingUsernames();
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
           remoteUsers.add(remoteUid);
@@ -304,10 +300,7 @@ class VoiceCallController extends ChangeNotifier {
     );
   }
 
-  void _stopHeartbeatPolling() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = null;
-  }
+
 
   Future<void> _sendHeartbeat() async {
     if (!isHost || !isConnected) return;
@@ -499,24 +492,7 @@ class VoiceCallController extends ChangeNotifier {
     }
   }
 
-  Future<void> leaveChannel() async {
-    if (isHost) await stopSessionOnBackend();
-    await agoraEngine.leaveChannel();
-    speakerTracker.reset();
-    isConnected = false;
-    remoteUsers.clear();
-    isMuted = true;
-    
-    // ✅ NEW: Allow screen to sleep after call
-    unawaited(WakelockPlus.disable());
-    
-    statusMessage = 'Disconnected';
-    _stopRecordingStatusPolling();
-    _stopHeartbeatPolling();
-    presenceStatus = PresenceStatus.offline;
-    notifyListeners();
-    if (!isHost) _startSessionStatusPolling();
-  }
+
 
   /// Callback set by the screen for errors to show in a SnackBar.
   void Function(String)? onError;
@@ -654,82 +630,9 @@ class VoiceCallController extends ChangeNotifier {
     } catch (_) {}
   }
 
-  // ─── Username fetching ────────────────────────────────────────────────────
-
-  void _startFetchingUsernames() {
-    // Redundant - Now handled by _checkSessionStatus consolidated sync
-  }
-
-  Future<void> _fetchUsernames() async {
-    try {
-      final response = await http
-          .get(Uri.parse('$backendUrl/session/$channelName/users'))
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final users = (data['users'] as List?) ?? [];
-        final hUid = data['hostUid'];
-
-        for (var user in users) {
-          if (user is Map) {
-            final uId = user['userId'] is int
-                ? user['userId'] as int
-                : int.tryParse(user['userId']?.toString() ?? '') ?? 0;
-            if (uId != 0) {
-              usernames[uId] = user['username']?.toString() ?? 'Unknown';
-            }
-          }
-        }
-
-        if (hUid != null && hostUid == null) {
-          hostUid = hUid is int ? hUid : int.tryParse(hUid.toString());
-        }
-        notifyListeners();
-
-        if (!isHost && hostUid != null) {
-          for (final rUid in remoteUsers) {
-            await _applySelectiveAudioSubscription(rUid);
-          }
-        }
-      }
-    } catch (_) {}
-  }
-
-  // ─── Recording status ─────────────────────────────────────────────────────
-
-  void _startRecordingStatusPolling() {
-    // Redundant - Now handled by _checkSessionStatus consolidated sync
-  }
-
   void _stopRecordingStatusPolling() {
     _recordingStatusTimer?.cancel();
     _recordingStatusTimer = null;
-  }
-
-  Future<void> _checkRecordingStatus() async {
-    if (_checkingRecordingStatus) return;
-    _checkingRecordingStatus = true;
-    try {
-      final token = await authService.getToken();
-      final response = await http
-          .get(
-            Uri.parse('$backendUrl/recording/active'),
-            headers: {
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-          )
-          .timeout(const Duration(seconds: 5));
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        final recordings = (data['recordings'] as List?) ?? [];
-        isRecording =
-            recordings.any((rec) => rec is Map && rec['channelName'] == channelName);
-        notifyListeners();
-      }
-    } catch (_) {
-    } finally {
-      _checkingRecordingStatus = false;
-    }
   }
 
 
@@ -883,8 +786,25 @@ class VoiceCallController extends ChangeNotifier {
     try {
       if (isHost) {
         await _notifyHostOffline();
+        await stopSessionOnBackend();
       }
+      
+      await agoraEngine.leaveChannel();
+      speakerTracker.reset();
+      isConnected = false;
+      remoteUsers.clear();
+      isMuted = true;
+      
+      // ✅ Allow screen to sleep after call
+      unawaited(WakelockPlus.disable());
+      
+      statusMessage = 'Disconnected';
+      presenceStatus = PresenceStatus.offline;
+      
       await _leaveChannelAndDestroy();
+      
+      if (!isHost) _startSessionStatusPolling();
+      notifyListeners();
     } catch (e) {
       debugPrint('Error leaving channel: $e');
     }

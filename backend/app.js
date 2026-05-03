@@ -10,13 +10,13 @@ const morgan = require('morgan');
 const fileUpload = require('express-fileupload');
 const connectDB = require('./src/config/db');
 const errorHandler = require('./src/middleware/error');
-const { authMiddleware, allowRole } = require('./src/middleware/auth');
+const { authMiddleware } = require('./src/middleware/auth');
 
 const authRoutes = require('./src/routes/authRoutes');
 const recordingRoutes = require('./src/routes/recordingRoutes');
 const sessionRoutes = require('./src/routes/sessionRoutes');
 const agoraController = require('./src/controllers/AgoraController');
-const authController = require('./src/controllers/AuthController');
+
 const recordingController = require('./src/controllers/RecordingController');
 
 const app = express();
@@ -51,7 +51,10 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization'],
 };
 
-if (process.env.NODE_ENV === 'production' && (!process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS === '*')) {
+if (
+  process.env.NODE_ENV === 'production' &&
+  (!process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS === '*')
+) {
   console.warn('⚠️ SECURITY WARNING: CORS is wide open in production. Set ALLOWED_ORIGINS.');
 }
 app.use(cors(corsOptions));

@@ -202,26 +202,24 @@ exports.sendHeartbeat = async (req, res, next) => {
     const now = new Date();
 
     const update = { $set: { lastHeartbeat: now } };
-    
+
     // SECURITY: Only the authenticated host can update the host presence flag
     if (req.user && req.user.role === 'host') {
       update.$set.hostLastHeartbeat = now;
     }
 
-    const session = await Session.findOneAndUpdate(
-      { sessionId, isActive: true },
-      update,
-      { new: true }
-    );
+    const session = await Session.findOneAndUpdate({ sessionId, isActive: true }, update, {
+      new: true,
+    });
 
     if (!session) {
       return res.status(404).json({ error: 'Active session not found' });
     }
 
-    res.status(200).json({ 
-      success: true, 
+    res.status(200).json({
+      success: true,
       lastHeartbeat: now,
-      isHost: req.user.role === 'host'
+      isHost: req.user.role === 'host',
     });
   } catch (error) {
     next(error);
@@ -234,12 +232,9 @@ exports.sendHeartbeat = async (req, res, next) => {
 exports.setHostOffline = async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
-    
+
     // Set hostLastHeartbeat to a very old date to trigger immediate "Offline" status
-    await Session.updateOne(
-      { sessionId },
-      { $set: { hostLastHeartbeat: new Date(0) } }
-    );
+    await Session.updateOne({ sessionId }, { $set: { hostLastHeartbeat: new Date(0) } });
 
     console.log(`👤 Host ${req.user.username} manually marked offline for ${sessionId}`);
     res.status(200).json({ success: true, message: 'Host marked offline' });
@@ -272,10 +267,10 @@ exports.getSessionStatus = async (req, res) => {
   }
 
   // Filter out stale users from the list (users who haven't heartbeated in 60s)
-  const activeUsers = (session.users || []).filter(u => {
-     // If we had a lastHeartbeat per user we would check it here. 
-     // For now, we return all users registered in the session.
-     return true; 
+  const activeUsers = (session.users || []).filter((_) => {
+    // If we had a lastHeartbeat per user we would check it here.
+    // For now, we return all users registered in the session.
+    return true;
   });
 
   res.json({
@@ -285,11 +280,11 @@ exports.getSessionStatus = async (req, res) => {
     isJoinable: session.isActive && hostOnline,
     isRecording: session.isActive && !!session.recordingActive,
     participantCount: activeUsers.length,
-    participants: activeUsers.map(u => ({
+    participants: activeUsers.map((u) => ({
       userId: u.userId,
       username: u.username,
       role: u.role,
-      isSpeaking: u.isSpeaking
+      isSpeaking: u.isSpeaking,
     })),
     startedAt: session.startedAt,
     lastHeartbeat: session.lastHeartbeat,
@@ -308,7 +303,9 @@ exports.recordSpeakingEvent = async (req, res, next) => {
 
     // Reject if the payload userId doesn't match the authenticated userId (unless host is logging for someone else, which isn't a current use case)
     if (userId !== undefined && String(userId) !== String(authenticatedUserId)) {
-      console.warn(`🔐 Security Alert: User ${req.user.username} tried to log speaking event for user ID ${userId}`);
+      console.warn(
+        `🔐 Security Alert: User ${req.user.username} tried to log speaking event for user ID ${userId}`
+      );
       return res.status(403).json({
         error: 'Forbidden',
         message: 'You can only log events for your own user identity.',
@@ -332,7 +329,7 @@ exports.listSpeakingEvents = async (req, res, next) => {
   try {
     const { userId, sessionId } = req.query;
     const filter = {};
-    
+
     // SECURITY: Users can only see their own events. Hosts can see everything.
     if (req.user.role !== 'host') {
       filter.userId = req.user.userId;

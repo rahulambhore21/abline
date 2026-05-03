@@ -27,8 +27,6 @@ const regionMap = {
   21: 'eu-north-1',
 };
 
-
-
 const config = {
   // Server Config
   port: process.env.PORT || 5000,

@@ -190,16 +190,16 @@ exports.getHost = async (req, res, next) => {
 exports.verifyAdminPin = async (req, res) => {
   try {
     const { pin } = req.body;
-    
+
     // In production, this should be fetched from environment variables.
     // If not set, we use a default but log a severe warning.
     const systemPin = process.env.ADMIN_DELETE_PIN;
-    
+
     if (!systemPin) {
       console.error('🛑 SECURITY WARNING: ADMIN_DELETE_PIN not set in environment.');
-      return res.status(500).json({ 
-        error: 'Configuration Error', 
-        message: 'Administrative actions are currently disabled for security reasons.' 
+      return res.status(500).json({
+        error: 'Configuration Error',
+        message: 'Administrative actions are currently disabled for security reasons.',
       });
     }
 

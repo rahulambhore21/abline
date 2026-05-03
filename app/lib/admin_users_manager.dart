@@ -475,7 +475,7 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
         if (mounted) Navigator.pop(context, true);
       } else {
         final error = jsonDecode(response.body);
-        widget.onSnackBar(error['message'] ?? '❌ Invalid PIN', true);
+        widget.onSnackBar((error['message'] as String?) ?? '❌ Invalid PIN', true);
       }
     } catch (e) {
       widget.onSnackBar('❌ Verification error: $e', true);

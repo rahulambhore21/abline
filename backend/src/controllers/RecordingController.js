@@ -178,7 +178,7 @@ const crypto = require('crypto');
 
 exports.saveRecording = async (req, res, next) => {
   try {
-    const { userId, sessionId, durationMs, username, url, filename: providedFilename } = req.body;
+    const { userId, sessionId, durationMs, url, filename: providedFilename } = req.body;
     const audioFile = req.files?.audioFile;
 
     if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
@@ -189,16 +189,22 @@ exports.saveRecording = async (req, res, next) => {
 
     // Reject spoofed userId
     if (userId !== undefined && String(userId) !== String(authenticatedUserId)) {
-      console.warn(`🔐 Security Alert: User ${authenticatedUsername} tried to save recording for userId ${userId}`);
-      return res.status(403).json({ error: 'Forbidden', message: 'You can only save recordings for yourself.' });
+      console.warn(
+        `🔐 Security Alert: User ${authenticatedUsername} tried to save recording for userId ${userId}`
+      );
+      return res
+        .status(403)
+        .json({ error: 'Forbidden', message: 'You can only save recordings for yourself.' });
     }
 
     let finalUrl = url;
     let recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+
     // SECURITY: Sanitize filename to prevent directory traversal or malicious characters
-    let sanitizedFilename = (providedFilename || `${recordingId}.m4a`)
-        .replace(/[^a-zA-Z0-9.\-_]/g, ''); // Only allow alphanumeric, dots, dashes, underscores
+    let sanitizedFilename = (providedFilename || `${recordingId}.m4a`).replace(
+      /[^a-zA-Z0-9.\-_]/g,
+      ''
+    ); // Only allow alphanumeric, dots, dashes, underscores
 
     if (audioFile) {
       finalUrl = await uploadToS3(audioFile.data, sanitizedFilename, audioFile.mimetype);
@@ -232,7 +238,10 @@ exports.requestUploadUrl = async (req, res, next) => {
     if (!filename) return res.status(400).json({ error: 'Missing filename' });
 
     // SECURITY: Sanitize filename to prevent S3 path injection or manipulation
-    const sanitizedFilename = filename.split('/').pop().replace(/[^a-zA-Z0-9.\-_]/g, '');
+    const sanitizedFilename = filename
+      .split('/')
+      .pop()
+      .replace(/[^a-zA-Z0-9.\-_]/g, '');
     const finalFilename = `user_${req.user.userId}/${Date.now()}_${sanitizedFilename}`;
 
     const uploadUrl = await getPresignedUrl(finalFilename, contentType);
@@ -318,7 +327,9 @@ exports.webhook = async (req, res) => {
         return res.status(401).json({ status: 'unauthorized', message: 'Invalid signature' });
       }
     } else if (process.env.NODE_ENV === 'production' && !secret) {
-      console.warn('🛑 SECURITY WARNING: AGORA_WEBHOOK_SECRET not set in production. Webhooks are vulnerable to spoofing.');
+      console.warn(
+        '🛑 SECURITY WARNING: AGORA_WEBHOOK_SECRET not set in production. Webhooks are vulnerable to spoofing.'
+      );
     }
 
     const { sid, cname, fileList } = req.body;
