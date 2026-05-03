@@ -196,7 +196,7 @@ exports.saveRecording = async (req, res, next) => {
 
     // We trust the userId (Agora UID) passed from the app as long as the username matches the authenticated one
     // In this app, users can choose their own names/UIDs but the JWT ensures they are who they say they are.
-    
+
     let finalUrl = url;
     let recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
 
@@ -254,9 +254,11 @@ exports.requestUploadUrl = async (req, res, next) => {
 exports.downloadRecording = async (req, res) => {
   const { recordingId } = req.params;
   const { method } = req;
-  
+
   try {
-    console.log(`📥 [${method}] Download request for recording: ${recordingId} from user: ${req.user?.username}`);
+    console.log(
+      `📥 [${method}] Download request for recording: ${recordingId} from user: ${req.user?.username}`
+    );
     
     const recording = await Recording.findOne({ recordingId }).lean();
 
@@ -288,12 +290,12 @@ exports.downloadRecording = async (req, res) => {
       try {
         const { getS3FileStream } = require('../services/S3Service');
         console.log(`📡 Fetching from S3: ${recording.filename}`);
-        
+
         const stream = await getS3FileStream(recording.filename);
 
         res.setHeader('Content-Type', 'audio/mp4');
         res.setHeader('Accept-Ranges', 'bytes');
-        
+
         if (method === 'HEAD') {
           console.log(`✅ [HEAD] File exists on S3: ${recording.filename}`);
           return res.status(200).end();
@@ -304,7 +306,7 @@ exports.downloadRecording = async (req, res) => {
         console.error(`❌ S3 Retrieval failed for ${recording.filename}:`, s3Error.message);
         // If it's a HEAD request and S3 fails, return 404
         if (method === 'HEAD') return res.status(404).end();
-        
+
         console.log('🔄 Attempting direct redirect as fallback...');
         return res.redirect(recording.url);
       }
