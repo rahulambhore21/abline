@@ -23,9 +23,14 @@ exports.addUserToSession = async (req, res, next) => {
 
     if (isHost) {
       // If host joins, ensure the session is marked active and recording starts
-      const result = await startSessionInternal(sessionId);
-      session = result.session;
-      console.log(`🎙️ Session ${sessionId} activated by Host join.`);
+      // Only start if not already active to avoid redundant Agora calls
+      if (!session || !session.isActive) {
+        const result = await startSessionInternal(sessionId);
+        session = result.session;
+        console.log(`🎙️ Session ${sessionId} activated by Host join.`);
+      } else {
+        console.log(`🎙️ Host joined existing active session ${sessionId}.`);
+      }
     } else if (!session || !session.isActive) {
       return res.status(403).json({
         error: 'Session not active',
@@ -90,28 +95,42 @@ exports.getSessionUsers = async (req, res) => {
  * Internal logic to start a session and its associated recording
  */
 async function startSessionInternal(sessionId) {
-  let session = await Session.findOneAndUpdate(
+  let session = await Session.findOne({ sessionId });
+  
+  // If session is already active and recording is on, don't re-start
+  if (session && session.isActive && session.recordingActive) {
+    console.log(`ℹ️ Session ${sessionId} is already active with recording.`);
+    return { session, recordingActive: true };
+  }
+
+  // Atomic update to mark session as active
+  session = await Session.findOneAndUpdate(
     { sessionId },
-    { $set: { isActive: true, startedAt: new Date() } },
+    { $set: { isActive: true, startedAt: session?.startedAt || new Date() } },
     { upsert: true, new: true }
   );
 
-  let recordingActive = false;
+  let recordingActive = !!session.recordingActive;
   try {
-    const resourceId = await acquireRecording(sessionId);
-    const recordingData = await startRecording(sessionId, resourceId);
+    // Only acquire and start if recording is not already marked as active in DB
+    if (!session.recordingActive) {
+      const resourceId = await acquireRecording(sessionId);
+      const recordingData = await startRecording(sessionId, resourceId);
 
-    await Session.updateOne(
-      { sessionId },
-      {
-        $set: {
-          recordingResourceId: resourceId,
-          recordingSid: recordingData.sid,
-          recordingActive: true,
-        },
-      }
-    );
-    recordingActive = true;
+      await Session.updateOne(
+        { sessionId },
+        {
+          $set: {
+            recordingResourceId: resourceId,
+            recordingSid: recordingData.sid,
+            recordingActive: true,
+          },
+        }
+      );
+      recordingActive = true;
+    } else {
+      recordingActive = true;
+    }
   } catch (err) {
     console.warn(`⚠️ Auto-recording failed for session ${sessionId}:`, err.message);
   }

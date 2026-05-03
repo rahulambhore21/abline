@@ -52,6 +52,16 @@ exports.startRecording = async (req, res, next) => {
     if (!channelName || uid === undefined) {
       return res.status(400).json({ error: 'Missing required fields: channelName, uid' });
     }
+    // Check if already active
+    const active = activeRecordings.get(channelName);
+    if (active) {
+      return res.status(200).json({ 
+        resourceId: active.resourceId, 
+        sid: active.sid, 
+        message: 'Recording is already active' 
+      });
+    }
+
     const resourceId = await acquireRecording(channelName);
     const userId = req.body.userId || req.user?.id;
     const username = req.body.username || req.user?.username;

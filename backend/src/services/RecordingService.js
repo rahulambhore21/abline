@@ -154,7 +154,12 @@ async function startRecording(channelName, resourceId, userId, username) {
       console.error('⚠️ Agora Start API returned non-200 status:', response.status, response.data);
       throw new Error('No sid returned from start API');
     } catch (apiError) {
-      console.error('❌ Agora Start API Call failed:', apiError.response?.data || apiError.message);
+      const agoraError = apiError.response?.data;
+      if (agoraError && agoraError.code === 53) {
+        console.warn(`ℹ️ Agora Task Conflict (code 53) for ${channelName}. Assuming already started.`);
+        return { resourceId, sid: 'ALREADY_STARTED' }; 
+      }
+      console.error('❌ Agora Start API Call failed:', agoraError || apiError.message);
       throw apiError;
     }
   } catch (error) {
