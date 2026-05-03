@@ -143,7 +143,10 @@ class AuthService {
   Future<http.Response> authenticatedPut(String url, {Object? body, Map<String, String>? headers, bool authenticated = true}) => 
       _makeRequest('PUT', url, body: body, headers: headers, authenticated: authenticated);
 
-  Future<http.Response> authenticatedHead(String url, {Map<String, String>? headers, bool authenticated = true}) => 
+  Future<http.Response> authenticatedPatch(String url, {Object? body, Map<String, String>? headers, bool authenticated = true}) => 
+      _makeRequest('PATCH', url, body: body, headers: headers, authenticated: authenticated);
+
+  Future<http.Response> authenticatedHead(String url, {Map<String, String>? headers, bool authenticated = true}) =>
       _makeRequest('HEAD', url, headers: headers, authenticated: authenticated);
 
   Future<http.Response> authenticatedDelete(String url, {Object? body, Map<String, String>? headers, bool authenticated = true}) => 
@@ -366,20 +369,6 @@ class AuthService {
     _invalidateCache(); // ✅ OPTIMIZATION: Clear cache on logout
   }
 
-  /// Make authenticated HTTP GET request
-  Future<http.Response> authenticatedGet(String url) => _makeRequest('GET', url);
-
-  /// Make authenticated HTTP POST request
-  Future<http.Response> authenticatedPost(String url, {Object? body}) => _makeRequest('POST', url, body: body);
-
-  /// Make authenticated HTTP PUT request
-  Future<http.Response> authenticatedPut(String url, {Object? body}) => _makeRequest('PUT', url, body: body);
-
-  /// Make authenticated HTTP DELETE request
-  Future<http.Response> authenticatedDelete(String url, {Object? body}) => _makeRequest('DELETE', url, body: body);
-
-  /// Make authenticated HTTP HEAD request
-  Future<http.Response> authenticatedHead(String url) => _makeRequest('HEAD', url);
 
   /// Save token to secure storage
   Future<void> _saveToken(String token) async {
