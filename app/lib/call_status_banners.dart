@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
+import 'voice_call_controller.dart' show PresenceStatus;
 
 /// Top status banners shown on the call screen:
 /// - Red "🔴 RECORDING ACTIVE" banner when cloud recording is on.
 /// - Orange/green session status for non-host users who haven't joined yet.
+/// - Yellow "⚠️ RECONNECTING" banner for host presence issues.
 class CallStatusBanners extends StatelessWidget {
   final bool isRecording;
   final bool isHost;
   final bool isConnected;
   final bool isSessionActive;
+  final PresenceStatus presenceStatus;
 
   const CallStatusBanners({
     super.key,
@@ -15,11 +18,22 @@ class CallStatusBanners extends StatelessWidget {
     required this.isHost,
     required this.isConnected,
     required this.isSessionActive,
+    required this.presenceStatus,
   });
 
   @override
   Widget build(BuildContext context) => Column(
       children: [
+        // Reconnecting banner (Host only)
+        if (isHost && presenceStatus == PresenceStatus.reconnecting) ...[
+          const _Banner(
+            color: Colors.amber,
+            icon: Icons.sync_problem,
+            message: '⚠️ RECONNECTING - Check your internet connection',
+          ),
+          const SizedBox(height: 16),
+        ],
+
         // Cloud recording active banner
         if (isRecording) ...[
           const _Banner(

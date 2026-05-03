@@ -106,7 +106,13 @@ async function startSessionInternal(sessionId) {
   // Atomic update to mark session as active
   session = await Session.findOneAndUpdate(
     { sessionId },
-    { $set: { isActive: true, startedAt: session?.startedAt || new Date() } },
+    {
+      $set: {
+        isActive: true,
+        startedAt: session?.startedAt || new Date(),
+        lastHeartbeat: new Date(),
+      },
+    },
     { upsert: true, new: true }
   );
 
@@ -153,26 +159,58 @@ exports.startSession = async (req, res, next) => {
   }
 };
 
+/**
+ * Internal logic to stop a session and its associated recording
+ */
+async function stopSessionInternal(sessionId) {
+  const session = await Session.findOne({ sessionId });
+  if (!session || !session.isActive) return { success: true, message: 'Already inactive' };
+
+  await Session.updateOne(
+    { sessionId },
+    { $set: { isActive: false, stoppedAt: new Date(), recordingActive: false } }
+  );
+
+  if (session.recordingActive && session.recordingSid) {
+    try {
+      await stopRecording(sessionId, session.recordingResourceId, session.recordingSid, 'mix');
+      console.log(`⏹️ Session ${sessionId} stopped (recording ended).`);
+    } catch (err) {
+      console.warn('⚠️ Auto-recording stop failed:', err.message);
+    }
+  }
+
+  return { success: true, sessionId, stoppedAt: new Date() };
+}
+
 exports.stopSession = async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
-    const session = await Session.findOne({ sessionId });
-    if (!session) return res.status(404).json({ error: 'Session not found' });
+    const result = await stopSessionInternal(sessionId);
+    res.status(200).json(result);
+  } catch (error) {
+    next(error);
+  }
+};
 
-    await Session.updateOne(
-      { sessionId },
-      { $set: { isActive: false, stoppedAt: new Date(), recordingActive: false } }
+const HEARTBEAT_TIMEOUT_MS = 30000; // 30 seconds
+
+exports.sendHeartbeat = async (req, res, next) => {
+  try {
+    const { id: sessionId } = req.params;
+    const now = new Date();
+
+    const session = await Session.findOneAndUpdate(
+      { sessionId, isActive: true },
+      { $set: { lastHeartbeat: now } },
+      { new: true }
     );
 
-    if (session.recordingActive && session.recordingSid) {
-      try {
-        await stopRecording(sessionId, session.recordingResourceId, session.recordingSid, 'mix');
-      } catch (err) {
-        console.warn('⚠️ Auto-recording stop failed:', err.message);
-      }
+    if (!session) {
+      return res.status(404).json({ error: 'Active session not found' });
     }
 
-    res.status(200).json({ success: true, sessionId, stoppedAt: new Date() });
+    res.status(200).json({ success: true, lastHeartbeat: now });
   } catch (error) {
     next(error);
   }
@@ -180,13 +218,26 @@ exports.stopSession = async (req, res, next) => {
 
 exports.getSessionStatus = async (req, res) => {
   const { id: sessionId } = req.params;
-  const session = await Session.findOne({ sessionId }).lean();
+  let session = await Session.findOne({ sessionId }).lean();
+
   if (!session) return res.json({ sessionId, isActive: false, users: 0 });
+
+  // ✅ AUTHORITATIVE CHECK: If session is active but heartbeat is stale, auto-stop it
+  if (session.isActive && session.lastHeartbeat) {
+    const timeSinceLastHeartbeat = Date.now() - new Date(session.lastHeartbeat).getTime();
+    if (timeSinceLastHeartbeat > HEARTBEAT_TIMEOUT_MS) {
+      console.warn(`🕒 Heartbeat timeout for ${sessionId}. Marking offline.`);
+      await stopSessionInternal(sessionId);
+      session.isActive = false; // Reflect in current response
+    }
+  }
+
   res.json({
     sessionId,
     isActive: session.isActive,
     startedAt: session.startedAt,
     users: session.users.length,
+    lastHeartbeat: session.lastHeartbeat,
   });
 };
 

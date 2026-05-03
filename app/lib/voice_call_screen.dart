@@ -132,6 +132,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               isHost: _ctrl.isHost,
               isConnected: _ctrl.isConnected,
               isSessionActive: _ctrl.isSessionActive,
+              presenceStatus: _ctrl.presenceStatus,
             ),
 
 
@@ -239,6 +240,7 @@ class _StatusLabel extends StatelessWidget {
   const _StatusLabel({required this.ctrl});
 
   String get _text {
+    if (ctrl.presenceStatus == PresenceStatus.reconnecting) return 'RECONNECTING...';
     if (ctrl.isJoining) return 'CONNECTING...';
     if (ctrl.isConnected) {
       if (ctrl.isHost) {
@@ -251,6 +253,7 @@ class _StatusLabel extends StatelessWidget {
   }
 
   Color get _color {
+    if (ctrl.presenceStatus == PresenceStatus.reconnecting) return Colors.amber;
     if (ctrl.isJoining) return const Color(0xFFFFCD00);
     if (ctrl.isConnected && !ctrl.isMuted) return const Color(0xFF00FF41);
     return Colors.white70;

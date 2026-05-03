@@ -16,6 +16,8 @@ import 'auth_service.dart';
 import 'recording.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+enum PresenceStatus { online, offline, reconnecting, waiting }
+
 /// All mutable state for the voice call, extracted from [VoiceCallScreen].
 ///
 /// Keeping business logic here makes the screen widget thin and testable.
@@ -49,6 +51,7 @@ class VoiceCallController extends ChangeNotifier {
   bool isSpeakerOn = false; // ✅ NEW: Track speakerphone status
   bool isHost = false;
   int? hostUid;
+  PresenceStatus presenceStatus = PresenceStatus.waiting;
 
   // ─── Recording state ──────────────────────────────────────────────────────
   bool isRecording = false;           // Cloud recording active
@@ -65,6 +68,7 @@ class VoiceCallController extends ChangeNotifier {
   Timer? _sessionStatusTimer;
   Timer? _recordingStatusTimer;
   Timer? _usernamesFetchTimer;
+  Timer? _heartbeatTimer;
   Directory? _appDocDir;
 
 
@@ -111,6 +115,8 @@ class VoiceCallController extends ChangeNotifier {
       _startSessionStatusPolling();
     } else {
       isSessionActive = true;
+      presenceStatus = PresenceStatus.online;
+      _startHeartbeatPolling();
       notifyListeners();
     }
   }
@@ -261,8 +267,67 @@ class VoiceCallController extends ChangeNotifier {
         }
       }
     } catch (_) {
+      presenceStatus = PresenceStatus.reconnecting;
+      notifyListeners();
     } finally {
       _checkingSession = false;
+    }
+  }
+
+  // ─── Heartbeat (Host only) ────────────────────────────────────────────────
+
+  void _startHeartbeatPolling() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) => _sendHeartbeat(),
+    );
+  }
+
+  void _stopHeartbeatPolling() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  Future<void> _sendHeartbeat() async {
+    if (!isHost || !isConnected) return;
+
+    try {
+      final token = await authService.getToken();
+      if (token == null) return;
+
+      final response = await http
+          .post(
+            Uri.parse('$backendUrl/session/$channelName/heartbeat'),
+            headers: {
+              'Authorization': 'Bearer $token',
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200) {
+        if (presenceStatus != PresenceStatus.online) {
+          presenceStatus = PresenceStatus.online;
+          notifyListeners();
+        }
+      } else if (response.statusCode == 404) {
+        // Session was stopped or timed out on backend
+        presenceStatus = PresenceStatus.offline;
+        notifyListeners();
+        unawaited(leaveChannel());
+      } else {
+        _handleHeartbeatFailure();
+      }
+    } catch (e) {
+      _handleHeartbeatFailure();
+    }
+  }
+
+  void _handleHeartbeatFailure() {
+    if (presenceStatus == PresenceStatus.online) {
+      presenceStatus = PresenceStatus.reconnecting;
+      notifyListeners();
     }
   }
 
@@ -417,6 +482,8 @@ class VoiceCallController extends ChangeNotifier {
     
     statusMessage = 'Disconnected';
     _stopRecordingStatusPolling();
+    _stopHeartbeatPolling();
+    presenceStatus = PresenceStatus.offline;
     notifyListeners();
     if (!isHost) _startSessionStatusPolling();
   }

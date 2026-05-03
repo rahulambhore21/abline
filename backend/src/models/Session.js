@@ -7,6 +7,7 @@ const SessionSchema = new mongoose.Schema(
     hostUid: { type: Number },
     startedAt: { type: Date },
     stoppedAt: { type: Date },
+    lastHeartbeat: { type: Date },
     users: [
       {
         userId: { type: Number },
