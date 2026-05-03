@@ -202,9 +202,9 @@ exports.saveRecording = async (req, res, next) => {
 
     // SECURITY: Sanitize filename to prevent directory traversal or malicious characters
     let sanitizedFilename = (providedFilename || `${recordingId}.m4a`).replace(
-      /[^a-zA-Z0-9.\-_]/g,
+      /[^a-zA-Z0-9.\-_/]/g,
       ''
-    ); // Only allow alphanumeric, dots, dashes, underscores
+    ); // Allow alphanumeric, dots, dashes, underscores, and forward slashes
 
     if (audioFile) {
       finalUrl = await uploadToS3(audioFile.data, sanitizedFilename, audioFile.mimetype);
