@@ -52,14 +52,12 @@ class SpeakingEvent {
   ///
   /// Backend endpoint: POST /events/speaking
   /// The backend expects `start` and `end` fields.
-  Map<String, dynamic> toJson() {
-    return {
+  Map<String, dynamic> toJson() => {
       'userId': userId,
       'sessionId': sessionId,
       'start': startTime.toIso8601String(),
       'end': endTime.toIso8601String(),
     };
-  }
 
   @override
   String toString() =>

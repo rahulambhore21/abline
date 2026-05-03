@@ -60,7 +60,7 @@ class SpeakerTracker {
   void start() {
     _silenceTimer?.cancel();
     _silenceTimer = Timer.periodic(
-      Duration(milliseconds: silenceCheckIntervalMs),
+      const Duration(milliseconds: silenceCheckIntervalMs),
       (_) => tick(),
     );
   }

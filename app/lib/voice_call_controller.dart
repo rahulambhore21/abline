@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:record/record.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:talkcircle/voice_call_screen.dart' show VoiceCallScreen;
 import 'dart:io';
 import 'speaker_tracker.dart';
 import 'speaking_event.dart';
@@ -220,7 +221,7 @@ class VoiceCallController extends ChangeNotifier {
     _sessionStatusTimer?.cancel();
     _checkSessionStatus();
     _sessionStatusTimer = Timer.periodic(
-      Duration(seconds: _sessionPollInterval),
+      const Duration(seconds: _sessionPollInterval),
       (timer) {
         if (!_checkingSession) _checkSessionStatus();
       },
@@ -243,7 +244,7 @@ class VoiceCallController extends ChangeNotifier {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final wasActive = isSessionActive;
-        final active = data['isActive'] ?? false;
+        final active = (data['isActive'] ?? false) as bool;
         isSessionActive = active;
         statusMessage = active
             ? 'Session active - Ready to join'
@@ -255,7 +256,7 @@ class VoiceCallController extends ChangeNotifier {
         }
         if (wasActive && !active && isConnected) {
           debugPrint('🚪 Host ended call. Disconnecting...');
-          leaveChannel(); // ✅ NEW: Force leave locally
+          unawaited(leaveChannel()); // ✅ NEW: Force leave locally
           onHostLeft?.call();
         }
       }
@@ -327,7 +328,7 @@ class VoiceCallController extends ChangeNotifier {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      agoraToken = data['token'];
+      agoraToken = data['token'] as String?;
       tokenFetchedAt = DateTime.now();
       statusMessage = 'Token obtained';
       notifyListeners();
@@ -393,7 +394,7 @@ class VoiceCallController extends ChangeNotifier {
       isMuted = true;
       
       // ✅ NEW: Keep screen awake during call
-      WakelockPlus.enable();
+      unawaited(WakelockPlus.enable());
     } catch (e) {
       statusMessage = 'Failed to connect - tap to retry';
       onError?.call('Failed to join: $e');
@@ -412,7 +413,7 @@ class VoiceCallController extends ChangeNotifier {
     isMuted = true;
     
     // ✅ NEW: Allow screen to sleep after call
-    WakelockPlus.disable();
+    unawaited(WakelockPlus.disable());
     
     statusMessage = 'Disconnected';
     _stopRecordingStatusPolling();
@@ -434,7 +435,7 @@ class VoiceCallController extends ChangeNotifier {
     
     // Fire and forget (mostly) to avoid lag, but handle errors
     unawaited(agoraEngine.muteLocalAudioStream(false).catchError((e) {
-      print("Error unmuting: $e");
+      print('Error unmuting: $e');
     }));
     
     if (!isHost && !isRecordingAudio) {
@@ -450,7 +451,7 @@ class VoiceCallController extends ChangeNotifier {
     notifyListeners();
     
     unawaited(agoraEngine.muteLocalAudioStream(true).catchError((e) {
-      print("Error muting: $e");
+      print('Error muting: $e');
     }));
     
     if (!isHost && isRecordingAudio) {
@@ -541,7 +542,7 @@ class VoiceCallController extends ChangeNotifier {
       } else if (response.statusCode == 403 || response.statusCode == 409) {
         // ✅ NEW: Handle Session Not Active (403) or Duplicate Name (409)
         final errorData = jsonDecode(response.body);
-        final errorMsg = errorData['message'] ?? 'Not authorized to join';
+        final errorMsg = (errorData['message'] ?? 'Not authorized to join') as String;
         
         await agoraEngine.leaveChannel();
         isConnected = false;
@@ -561,7 +562,7 @@ class VoiceCallController extends ChangeNotifier {
   void _startFetchingUsernames() {
     _fetchUsernames();
     _usernamesFetchTimer = Timer.periodic(
-      Duration(seconds: _usernameFetchInterval),
+      const Duration(seconds: _usernameFetchInterval),
       (_) {
         if (isConnected) _fetchUsernames();
       },
@@ -710,7 +711,7 @@ class VoiceCallController extends ChangeNotifier {
         throw Exception('Failed to get upload URL: ${responseUrl.statusCode}');
       }
       
-      final uploadUrl = jsonDecode(responseUrl.body)['uploadUrl'];
+      final uploadUrl = jsonDecode(responseUrl.body)['uploadUrl'] as String;
 
       // 2. ✅ Upload DIRECTLY to S3
       final fileBytes = await audioFile.readAsBytes();
@@ -747,7 +748,7 @@ class VoiceCallController extends ChangeNotifier {
       if (saveResponse.statusCode == 200 || saveResponse.statusCode == 201) {
         final data = jsonDecode(saveResponse.body);
         userRecordings.add(Recording(
-          id: data['recordingId'] ?? 'rec_${DateTime.now().millisecondsSinceEpoch}',
+          id: (data['recordingId'] ?? 'rec_${DateTime.now().millisecondsSinceEpoch}') as String,
           userId: uid,
           username: username,
           sessionId: channelName,

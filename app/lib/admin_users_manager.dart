@@ -162,7 +162,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
             children: [
               TextField(
                 controller: _usernameController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Username',
                   hintText: 'Enter username',
                   border: OutlineInputBorder(),
@@ -172,7 +172,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
               const SizedBox(height: 16),
               TextField(
                 controller: _passwordController,
-                decoration: InputDecoration(
+                decoration: const InputDecoration(
                   labelText: 'Password',
                   hintText: 'Enter password (min 4 chars)',
                   border: OutlineInputBorder(),
@@ -195,7 +195,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
           ElevatedButton(
             onPressed: _isCreating ? null : _createUser,
             child: _isCreating
-                ? SizedBox(
+                ? const SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(strokeWidth: 2),
@@ -208,8 +208,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
+  Widget build(BuildContext context) => SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -217,11 +216,11 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
+              const Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'User Management',
                       style: TextStyle(
                         color: Colors.white,
@@ -229,7 +228,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       'Create and manage users',
                       style: TextStyle(
@@ -311,9 +310,9 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
             if (_isLoading)
               const Center(child: CircularProgressIndicator())
             else if (_users.isEmpty)
-              Center(
+              const Center(
                 child: Padding(
-                  padding: const EdgeInsets.all(40.0),
+                  padding: EdgeInsets.all(40.0),
                   child: Column(
                     children: [
                       Icon(
@@ -321,7 +320,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                         size: 48,
                         color: Colors.white30,
                       ),
-                      const SizedBox(height: 16),
+                      SizedBox(height: 16),
                       Text(
                         'No users found',
                         style: TextStyle(
@@ -376,12 +375,11 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                       ),
                     ),
                   ],
-                  rows: _users.map((user) {
-                    return DataRow(
+                  rows: _users.map((user) => DataRow(
                       cells: [
                         DataCell(
                           Text(
-                            user['username'] ?? 'Unknown',
+                            (user['username'] ?? 'Unknown') as String,
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w500,
@@ -402,7 +400,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(
-                              user['role'] ?? 'user',
+                              (user['role'] ?? 'user') as String,
                               style: TextStyle(
                                 color: user['role'] == 'host'
                                     ? Colors.orange
@@ -418,20 +416,18 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                               ? const SizedBox.shrink()
                               : IconButton(
                                   icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                  onPressed: () => _deleteUser(user['id'], user['username'] ?? 'Unknown'),
+                                  onPressed: () => _deleteUser(user['id'] as String, (user['username'] ?? 'Unknown') as String),
                                   tooltip: 'Delete User',
                                 ),
                         ),
                       ],
-                    );
-                  }).toList(),
+                    )).toList(),
                 ),
               ),
           ],
         ],
       ),
     );
-  }
 }
 
 /// Dedicated dialog to manage its own TextEditingController lifecycle
@@ -458,8 +454,7 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
+  Widget build(BuildContext context) => AlertDialog(
       title: const Text('Confirm Deletion'),
       content: Column(
         mainAxisSize: MainAxisSize.min,
@@ -507,5 +502,4 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
         ),
       ],
     );
-  }
 }

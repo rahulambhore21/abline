@@ -72,7 +72,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
             ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
             .toList() ?? [];
 
-        final verified = data['verified'] ?? recordings.length;
+        final verified = (data['verified'] ?? recordings.length) as int;
         print('✅ Loaded $verified verified recordings out of ${data['total']}');
 
         if (mounted) {
@@ -83,7 +83,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         }
 
         // Show a subtle message if some recordings were removed
-        if (verified < (data['total'] ?? 0)) {
+        if (verified < ((data['total'] ?? 0) as int)) {
           if (mounted && context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
@@ -116,8 +116,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       backgroundColor: const Color(0xFF2a2a2a),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1a1a1a),
@@ -230,5 +229,4 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
                       ),
                     ),
     );
-  }
 }

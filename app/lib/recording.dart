@@ -19,8 +19,7 @@ class Recording {
     this.durationMs,
   });
 
-  factory Recording.fromJson(Map<String, dynamic> json) {
-    return Recording(
+  factory Recording.fromJson(Map<String, dynamic> json) => Recording(
       id: json['id'] as String,
       userId: json['userId'] is int
           ? json['userId'] as int
@@ -32,10 +31,8 @@ class Recording {
       recordedAt: json['recordedAt'] as String,
       durationMs: json['durationMs'] as int?,
     );
-  }
 
-  Map<String, dynamic> toJson() {
-    return {
+  Map<String, dynamic> toJson() => {
       'id': id,
       'userId': userId,
       'sessionId': sessionId,
@@ -44,5 +41,4 @@ class Recording {
       'recordedAt': recordedAt,
       'durationMs': durationMs,
     };
-  }
 }

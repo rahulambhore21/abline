@@ -112,8 +112,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   // _showSnackBar was unreferenced
 
   @override
-  Widget build(BuildContext context) {
-    return SingleChildScrollView(
+  Widget build(BuildContext context) => SingleChildScrollView(
       padding: const EdgeInsets.all(24.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -121,11 +120,11 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
+              const Flexible(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Recording Management',
                       style: TextStyle(
                         color: Colors.white,
@@ -133,7 +132,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                         fontWeight: FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 4),
+                    SizedBox(height: 4),
                     Text(
                       'Control and monitor recordings',
                       style: TextStyle(
@@ -207,18 +206,18 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                 border: Border.all(color: const Color(0xFF00FF41), width: 2),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: Row(
+              child: const Row(
                 children: [
-                  const Icon(
+                  Icon(
                     Icons.check_circle,
                     color: Color(0xFF00FF41),
                     size: 24,
                   ),
-                  const SizedBox(width: 12),
+                  SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Text(
                           '✅ Automatic Recording Active',
                           style: TextStyle(
@@ -263,7 +262,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white10),
                 ),
-                child: Center(
+                child: const Center(
                   child: Text(
                     'No active recordings',
                     style: TextStyle(color: Colors.white70),
@@ -272,8 +271,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
               )
             else
               Column(
-                children: _activeRecordings.map((recording) {
-                  return Container(
+                children: _activeRecordings.map((recording) => Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
@@ -311,7 +309,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                               const SizedBox(height: 4),
                               Text(
                                 'SID: ${recording['sid']?.toString().substring(0, 20) ?? 'N/A'}...',
-                                style: TextStyle(
+                                style: const TextStyle(
                                   color: Colors.white70,
                                   fontSize: 12,
                                 ),
@@ -329,8 +327,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                         ),
                       ],
                     ),
-                  );
-                }).toList(),
+                  )).toList(),
               ),
 
             // ✅ NEW: All Recordings by User Section
@@ -353,7 +350,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white10),
                 ),
-                child: Center(
+                child: const Center(
                   child: Text(
                     'No user recordings yet',
                     style: TextStyle(color: Colors.white70),
@@ -415,7 +412,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                                     const SizedBox(height: 4),
                                     Text(
                                       '${recordings.length} recording${recordings.length != 1 ? 's' : ''}',
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         color: Colors.white70,
                                         fontSize: 12,
                                       ),
@@ -442,5 +439,4 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
         ],
       ),
     );
-  }
 }

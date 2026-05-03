@@ -77,15 +77,12 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
+  Widget build(BuildContext context) => ListenableBuilder(
       listenable: _ctrl,
       builder: (context, _) => _buildScaffold(context),
     );
-  }
 
-  Widget _buildScaffold(BuildContext context) {
-    return PopScope(
+  Widget _buildScaffold(BuildContext context) => PopScope(
       canPop: false, // Handle pop manually to ensure leaveChannel is called
       onPopInvokedWithResult: (didPop, result) {
         if (didPop) return;
@@ -195,7 +192,6 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
     ),
   );
-}
 
   Future<void> _handleExit(BuildContext context) async {
     // Show a small overlay to prevent interaction while leaving
@@ -260,8 +256,7 @@ class _StatusLabel extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Text(
+  Widget build(BuildContext context) => Text(
       _text,
       style: TextStyle(
         color: _color,
@@ -270,5 +265,4 @@ class _StatusLabel extends StatelessWidget {
         letterSpacing: 1.5,
       ),
     );
-  }
 }

@@ -15,8 +15,7 @@ class ParticipantsTalkingPanel extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Expanded(
+  Widget build(BuildContext context) => Expanded(
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         padding: const EdgeInsets.all(16),
@@ -121,7 +120,6 @@ class ParticipantsTalkingPanel extends StatelessWidget {
         ),
       ),
     );
-  }
 }
 
 class _SpeakingDot extends StatelessWidget {
@@ -129,8 +127,7 @@ class _SpeakingDot extends StatelessWidget {
   const _SpeakingDot({required this.isSpeaking});
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
+  Widget build(BuildContext context) => Container(
       width: 12,
       height: 12,
       decoration: BoxDecoration(
@@ -146,5 +143,4 @@ class _SpeakingDot extends StatelessWidget {
             : null,
       ),
     );
-  }
 }

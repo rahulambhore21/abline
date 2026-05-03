@@ -21,8 +21,7 @@ class CallControlsBar extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
+  Widget build(BuildContext context) => Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFF3a3a3a),
@@ -61,7 +60,6 @@ class CallControlsBar extends StatelessWidget {
         ],
       ),
     );
-  }
 }
 
 class _ControlButton extends StatelessWidget {
@@ -78,8 +76,7 @@ class _ControlButton extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
+  Widget build(BuildContext context) => GestureDetector(
       onTap: onTap,
       child: Column(
         children: [
@@ -104,5 +101,4 @@ class _ControlButton extends StatelessWidget {
         ],
       ),
     );
-  }
 }

@@ -38,8 +38,7 @@ class MicButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Stack(
+  Widget build(BuildContext context) => Stack(
       alignment: Alignment.topRight,
       children: [
         Listener(
@@ -116,5 +115,4 @@ class MicButton extends StatelessWidget {
           ),
       ],
     );
-  }
 }

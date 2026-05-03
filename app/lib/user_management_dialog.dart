@@ -84,8 +84,7 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
+  Widget build(BuildContext context) => AlertDialog(
       title: const Text('Create New User'),
       content: SingleChildScrollView(
         child: Column(
@@ -94,7 +93,7 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
             // Username field
             TextField(
               controller: _usernameController,
-              decoration: InputDecoration(
+              decoration: const InputDecoration(
                 labelText: 'Username',
                 hintText: 'At least 3 characters',
                 border: OutlineInputBorder(),
@@ -110,8 +109,8 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
               decoration: InputDecoration(
                 labelText: 'Password',
                 hintText: 'At least 6 characters',
-                border: OutlineInputBorder(),
-                prefixIcon: Icon(Icons.lock),
+                border: const OutlineInputBorder(),
+                prefixIcon: const Icon(Icons.lock),
                 suffixIcon: IconButton(
                   icon: Icon(
                     _showPassword ? Icons.visibility : Icons.visibility_off,
@@ -137,7 +136,7 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.error, color: Colors.red, size: 20),
+                    const Icon(Icons.error, color: Colors.red, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -160,7 +159,7 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
                 ),
                 child: Row(
                   children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 20),
+                    const Icon(Icons.check_circle, color: Colors.green, size: 20),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -191,5 +190,4 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
         ),
       ],
     );
-  }
 }

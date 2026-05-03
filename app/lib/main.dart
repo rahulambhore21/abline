@@ -23,12 +23,10 @@ Future<void> main() async {
   };
 
   // Custom Error Widget for the "Red Screen of Death"
-  ErrorWidget.builder = (FlutterErrorDetails details) {
-    return GlobalErrorScreen(
+  ErrorWidget.builder = (FlutterErrorDetails details) => GlobalErrorScreen(
       error: details.exception.toString(),
       stackTrace: details.stack.toString(),
     );
-  };
 
   await SentryFlutter.init(
     (options) {
@@ -73,12 +71,10 @@ class _RestartWidgetState extends State<RestartWidget> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return KeyedSubtree(
+  Widget build(BuildContext context) => KeyedSubtree(
       key: key,
       child: widget.child,
     );
-  }
 }
 
 class GlobalErrorScreen extends StatefulWidget {
@@ -99,8 +95,7 @@ class _GlobalErrorScreenState extends State<GlobalErrorScreen> {
   bool _showDetails = false;
 
   @override
-  Widget build(BuildContext context) {
-    return Directionality(
+  Widget build(BuildContext context) => Directionality(
       textDirection: TextDirection.ltr,
       child: Theme(
         data: ThemeData.dark(),
@@ -236,7 +231,6 @@ class _GlobalErrorScreenState extends State<GlobalErrorScreen> {
         ),
       ),
     );
-  }
 }
 
 
@@ -276,8 +270,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
+  Widget build(BuildContext context) => MaterialApp(
       title: 'Talk Circle',
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
@@ -290,7 +283,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         '/admin': (context) => const AdminScreen(),
       },
     );
-  }
 }
 
 /// AuthWrapper checks authentication state and routes appropriately

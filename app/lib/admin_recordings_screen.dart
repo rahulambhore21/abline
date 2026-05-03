@@ -128,8 +128,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
+  Widget build(BuildContext context) => Scaffold(
       backgroundColor: const Color(0xFF2a2a2a),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1a1a1a),
@@ -311,7 +310,6 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                       ),
                     ),
     );
-  }
 
   /// Format duration as mm:ss
   String _formatDuration(int durationMs) {

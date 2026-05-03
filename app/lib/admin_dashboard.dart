@@ -190,7 +190,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
     try {
       // Generate a random UID for the recorder (0 is commonly used)
-      final recorderUid = 0;
+      const recorderUid = 0;
 
       print('🎬 Starting recording for channel: $_currentSessionId');
 
@@ -789,8 +789,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     required String value,
     required IconData icon,
     required Color color,
-  }) {
-    return Container(
+  }) => Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFF3a3a3a),
@@ -837,5 +836,4 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ],
       ),
     );
-  }
 }

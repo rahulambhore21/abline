@@ -18,12 +18,11 @@ class CallStatusBanners extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Column(
+  Widget build(BuildContext context) => Column(
       children: [
         // Cloud recording active banner
         if (isRecording) ...[
-          _Banner(
+          const _Banner(
             color: Colors.red,
             icon: Icons.fiber_manual_record,
             message: '🔴 RECORDING ACTIVE',
@@ -44,7 +43,6 @@ class CallStatusBanners extends StatelessWidget {
         ],
       ],
     );
-  }
 }
 
 class _Banner extends StatelessWidget {
@@ -59,8 +57,7 @@ class _Banner extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
+  Widget build(BuildContext context) => Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
@@ -85,5 +82,4 @@ class _Banner extends StatelessWidget {
         ],
       ),
     );
-  }
 }

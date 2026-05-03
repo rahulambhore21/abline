@@ -63,7 +63,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final isActive = data['isActive'] ?? false;
+        final isActive = (data['isActive'] ?? false) as bool;
 
         if (mounted) {
           setState(() {
@@ -104,7 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // 2. Fetch the actual host's username from the backend (public endpoint).
     //    This runs after setState so the screen is already visible.
-    _fetchHostName();
+    unawaited(_fetchHostName());
   }
 
   /// Fetch the host's username from GET /host (no auth required).
@@ -138,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _handleLogout() async {
     await _authService.logout();
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/login');
+      unawaited(Navigator.of(context).pushReplacementNamed('/login'));
     }
   }
 

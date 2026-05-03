@@ -59,11 +59,11 @@ class AuthService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         final loginResponse = LoginResponse(
-          token: data['token'],
-          role: data['role'],
-          userId: data['userId'],
+          token: data['token'] as String,
+          role: data['role'] as String,
+          userId: data['userId'] as String,
           username: username,
-          message: data['message'] ?? '',
+          message: (data['message'] ?? '') as String,
         );
         
         // Store token and role locally
@@ -97,9 +97,9 @@ class AuthService {
       if (response.statusCode == 201) {
         final data = jsonDecode(response.body);
         return RegisterResponse(
-          success: data['success'] ?? true,
-          userId: data['userId'],
-          message: data['message'] ?? 'Host registered successfully',
+          success: (data['success'] ?? true) as bool,
+          userId: data['userId'] as String,
+          message: (data['message'] ?? 'Host registered successfully') as String,
         );
       } else {
         final error = jsonDecode(response.body);
