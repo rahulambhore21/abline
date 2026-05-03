@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'auth_service.dart';
 import 'app_config.dart';
@@ -49,8 +48,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
 
     try {
       if (refresh) {
-        final activeResponse = await http
-            .get(Uri.parse('${AppConfig.backendBaseUrl}/recording/active'));
+        final activeResponse = await _authService.authenticatedGet(
+            '${AppConfig.backendBaseUrl}/recording/active');
         if (activeResponse.statusCode == 200) {
           final data = jsonDecode(activeResponse.body);
           setState(() {
@@ -61,11 +60,8 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
 
       // ✅ NEW: Load recordings with pagination
       try {
-        final userRecordingsResponse = await http.get(
-          Uri.parse('${AppConfig.backendBaseUrl}/recordings/session/test_room?page=$_currentPage&limit=50'),
-          headers: {
-            'Authorization': 'Bearer ${await _authService.getToken()}',
-          },
+        final userRecordingsResponse = await _authService.authenticatedGet(
+          '${AppConfig.backendBaseUrl}/recordings/session/test_room?page=$_currentPage&limit=50',
         );
 
         if (userRecordingsResponse.statusCode == 200) {

@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'auth_service.dart';
 import 'app_config.dart';
@@ -55,16 +54,16 @@ class _AdminDashboardState extends State<AdminDashboard> {
       }
 
       // Fetch active recordings
-      final recordingsResponse = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/recording/active'));
+      final recordingsResponse = await _authService
+          .authenticatedGet('${AppConfig.backendBaseUrl}/recording/active');
       if (recordingsResponse.statusCode == 200) {
         final data = jsonDecode(recordingsResponse.body);
         setState(() => _activeRecordings = (data['count'] ?? 0) as int);
       }
 
       // Fetch speaking events
-      final eventsResponse = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/events/speaking'));
+      final eventsResponse = await _authService
+          .authenticatedGet('${AppConfig.backendBaseUrl}/events/speaking');
       if (eventsResponse.statusCode == 200) {
         final data = jsonDecode(eventsResponse.body);
         setState(() => _totalSpeakingEvents = (data['total'] ?? 0) as int);
@@ -132,8 +131,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _checkSessionStatus() async {
     try {
       _currentSessionId = 'test_room';
-      final response = await http.get(
-        Uri.parse('${AppConfig.backendBaseUrl}/session/$_currentSessionId/status'),
+      final response = await _authService.authenticatedGet(
+        '${AppConfig.backendBaseUrl}/session/$_currentSessionId/status',
       );
 
       if (response.statusCode == 200) {

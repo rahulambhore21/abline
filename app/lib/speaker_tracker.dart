@@ -1,8 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'speaking_event.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
+import 'auth_service.dart';
 
 /// Callback when a speaking event is completed.
 typedef OnSpeakingEventComplete = void Function(SpeakingEvent event);
@@ -39,7 +38,7 @@ class SpeakerTracker {
   Timer? _silenceTimer;
 
   final OnSpeakingEventComplete? onSpeakingEventComplete;
-  final dynamic authService; // Pass AuthService here
+  final AuthService? authService; // ✅ Strong typing
   final String backendUrl;
   final String sessionId;
 
@@ -159,7 +158,7 @@ class SpeakerTracker {
         userState.isSpeaking = false;
         userState.lastEndTime = at;
         stateChanged = true;
-
+ 
         if (userState.lastStartTime != null) {
           final event = SpeakingEvent(
             userId: uid,
@@ -186,20 +185,14 @@ class SpeakerTracker {
   }
 
   Future<void> _sendEventToBackend(SpeakingEvent event) async {
+    if (authService == null) return;
     try {
-      final token = authService != null ? await authService.getToken() : null;
-      
-      final response = await http
-          .post(
-            Uri.parse('$backendUrl/events/speaking'),
-            headers: {
-              'Content-Type': 'application/json',
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-            body: jsonEncode(event.toJson()),
+      final response = await authService!
+          .authenticatedPost(
+            '$backendUrl/events/speaking',
+            body: event.toJson(),
           )
           .timeout(const Duration(seconds: 10));
-
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         debugPrint('✅ Event sent successfully: ${event.userId}');

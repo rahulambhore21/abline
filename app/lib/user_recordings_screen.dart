@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'app_config.dart';
 import 'auth_service.dart';
@@ -76,15 +75,8 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
       final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true&page=$_currentPage&limit=20';
       debugPrint('🌐 Fetching recordings from: $url');
 
-      final token = await _authService.getToken();
-      
-      final response = await http
-          .get(
-            Uri.parse(url),
-            headers: {
-              if (token != null) 'Authorization': 'Bearer $token',
-            },
-          )
+      final response = await _authService
+          .authenticatedGet(url)
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {

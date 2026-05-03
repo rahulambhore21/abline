@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:http/http.dart' as http;
 import 'recording.dart';
 import 'auth_service.dart';
 import 'app_config.dart';
@@ -88,8 +87,8 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
       final token = await _authService.getToken();
       final urlWithToken = '${recording.url}?token=${token ?? ''}';
       
-      final response = await http
-          .head(Uri.parse(urlWithToken))
+      final response = await _authService
+          .authenticatedHead(urlWithToken)
           .timeout(const Duration(seconds: 5));
 
       final exists = response.statusCode == 200;

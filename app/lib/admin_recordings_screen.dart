@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'app_config.dart';
 import 'auth_service.dart';
@@ -79,11 +78,8 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
           '$_backendUrl/recordings/session/${widget.sessionId}?verify=true';
       debugPrint('🌐 Fetching all session recordings from: $url');
 
-      final response = await http.get(
-        Uri.parse(url),
-        headers: {
-          'Authorization': 'Bearer $token',
-        },
+      final response = await _authService.authenticatedGet(
+        url,
       ).timeout(const Duration(seconds: 10));
 
       debugPrint('📡 Response status: ${response.statusCode}');

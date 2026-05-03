@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
-import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'voice_call_screen.dart';
 import 'user_recordings_screen.dart';
@@ -57,8 +56,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// ✅ Check if session is active and joinable (host is online)
   Future<void> _checkSessionStatus() async {
     try {
-      final response = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/session/test_room/status'))
+      final response = await _authService
+          .authenticatedGet('${AppConfig.backendBaseUrl}/session/test_room/status')
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -89,8 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
     
     try {
       // 2. Re-verify with backend
-      final response = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/session/test_room/status'))
+      final response = await _authService
+          .authenticatedGet('${AppConfig.backendBaseUrl}/session/test_room/status')
           .timeout(const Duration(seconds: 3));
 
       if (response.statusCode == 200) {
@@ -151,8 +150,8 @@ class _HomeScreenState extends State<HomeScreen> {
   /// Fetch the host's username from GET /host (no auth required).
   Future<void> _fetchHostName() async {
     try {
-      final response = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/host'))
+      final response = await _authService
+          .authenticatedGet('${AppConfig.backendBaseUrl}/host')
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {

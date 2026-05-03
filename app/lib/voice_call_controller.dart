@@ -295,8 +295,8 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
     if (_checkingSession) return;
     _checkingSession = true;
     try {
-      final response = await http
-          .get(Uri.parse('$backendUrl/session/$channelName/status'))
+      final response = await authService
+          .authenticatedGet('$backendUrl/session/$channelName/status')
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {
@@ -365,13 +365,9 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
       final token = await authService.getToken();
       if (token == null) return;
 
-      final response = await http
-          .post(
-            Uri.parse('$backendUrl/session/$channelName/heartbeat'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
+      final response = await authService
+          .authenticatedPost(
+            '$backendUrl/session/$channelName/heartbeat',
           )
           .timeout(const Duration(seconds: 5));
 
@@ -407,13 +403,9 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final token = await authService.getToken();
       if (token == null) return;
-      final response = await http
-          .post(
-            Uri.parse('$backendUrl/session/$channelName/start'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
+      final response = await authService
+          .authenticatedPost(
+            '$backendUrl/session/$channelName/start',
           )
           .timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
@@ -429,13 +421,9 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final token = await authService.getToken();
       if (token == null) return;
-      await http
-          .post(
-            Uri.parse('$backendUrl/session/$channelName/stop'),
-            headers: {
-              'Authorization': 'Bearer $token',
-              'Content-Type': 'application/json',
-            },
+      await authService
+          .authenticatedPost(
+            '$backendUrl/session/$channelName/stop',
           )
           .timeout(const Duration(seconds: 10));
       isSessionActive = false;
@@ -455,17 +443,8 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
     if (uid == 0) uid = Random().nextInt(100000) + 1;
 
-    final url =
-        Uri.parse('$backendUrl/agora/token?channelName=$channelName&uid=$uid');
-    
-    final jwtToken = await authService.getToken();
-    
-    final response = await http.get(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        if (jwtToken != null) 'Authorization': 'Bearer $jwtToken',
-      },
+    final response = await authService.authenticatedGet(
+      '$backendUrl/agora/token?channelName=$channelName&uid=$uid',
     ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
@@ -621,8 +600,8 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _fetchHostUidAndApply(int remoteUid) async {
     try {
-      final response = await http
-          .get(Uri.parse('$backendUrl/session/$channelName/users'))
+      final response = await authService
+          .authenticatedGet('$backendUrl/session/$channelName/users')
           .timeout(const Duration(seconds: 5));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -642,15 +621,14 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _registerUserInSession(int userUid) async {
     try {
-      final response = await http
-          .post(
-            Uri.parse('$backendUrl/session/$channelName/users/add'),
-            headers: {'Content-Type': 'application/json'},
-            body: jsonEncode({
+      final response = await authService
+          .authenticatedPost(
+            '$backendUrl/session/$channelName/users/add',
+            body: {
               'userId': userUid,
               'username': username,
               'role': isHost ? 'host' : 'user',
-            }),
+            },
           )
           .timeout(const Duration(seconds: 5));
 
@@ -742,16 +720,12 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
       // 1. ✅ Request a Pre-signed URL (Optimization: Direct to S3)
       final filename = 'rec_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
-      final responseUrl = await http.post(
-        Uri.parse('$backendUrl/recordings/request-upload-url'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
+      final responseUrl = await authService.authenticatedPost(
+        '$backendUrl/recordings/request-upload-url',
+        body: {
           'filename': filename,
           'contentType': 'audio/mp4',
-        }),
+        },
       ).timeout(const Duration(seconds: 10));
 
       if (responseUrl.statusCode != 200) {
@@ -782,20 +756,16 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
       // 3. ✅ Notify backend to save the record
       final s3Url = uploadUrl.split('?').first;
-      final saveResponse = await http.post(
-        Uri.parse('$backendUrl/recordings/save'),
-        headers: {
-          'Authorization': 'Bearer $token',
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
+      final saveResponse = await authService.authenticatedPost(
+        '$backendUrl/recordings/save',
+        body: {
           'userId': uid,
           'username': username,
           'sessionId': channelName,
           'durationMs': durationMs,
           'url': s3Url,
           'filename': filename,
-        }),
+        },
       ).timeout(const Duration(seconds: 15));
 
       if (saveResponse.statusCode == 200 || saveResponse.statusCode == 201) {
@@ -869,12 +839,8 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _notifyHostOffline() async {
     try {
-      final token = await authService.getToken();
-      await http.post(
-        Uri.parse('$backendUrl/session/$channelName/host/offline'),
-        headers: {
-          if (token != null) 'Authorization': 'Bearer $token',
-        },
+      await authService.authenticatedPost(
+        '$backendUrl/session/$channelName/host/offline',
       ).timeout(const Duration(seconds: 5));
     } catch (e) {
       debugPrint('Error notifying host offline: $e');

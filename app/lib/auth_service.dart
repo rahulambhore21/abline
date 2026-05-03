@@ -1,7 +1,7 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
-import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// AuthService handles JWT token management, login, registration, and API calls
@@ -17,8 +17,11 @@ class AuthService {
   String? _cachedUsername;
   bool _cacheInitialized = false;
 
-  AuthService({required this.backendUrl, this.storageKeyPrefix});
+  /// ✅ DEBUG: Global logging toggle
+  static const bool _enableLogging = true;
 
+  AuthService({required this.backendUrl, this.storageKeyPrefix});
+  
   /// ✅ OPTIMIZATION: Initialize cache from SharedPreferences on first access
   Future<void> _initializeCache() async {
     if (_cacheInitialized) return;
@@ -44,16 +47,85 @@ class AuthService {
     _cachedUsername = null;
   }
 
+  /// Internal request handler with logging and error normalization
+  Future<http.Response> _makeRequest(
+    String method,
+    String url, {
+    Map<String, String>? headers,
+    Object? body,
+    bool authenticated = true,
+  }) async {
+    final uri = Uri.parse(url);
+    final finalHeaders = {
+      'Content-Type': 'application/json',
+      ...?headers,
+    };
+
+    // ✅ Automatically JSON encode body if it's a Map or List
+    Object? processedBody = body;
+    if (body != null && body is! String) {
+      processedBody = jsonEncode(body);
+    }
+
+    if (authenticated) {
+      final token = await getToken();
+      if (token != null) {
+        finalHeaders['Authorization'] = 'Bearer $token';
+      }
+    }
+
+    if (_enableLogging) {
+      debugPrint('🌐 API [$method] $url');
+      if (body != null) debugPrint('📦 Body: $body');
+    }
+
+    try {
+      late http.Response response;
+      switch (method.toUpperCase()) {
+        case 'GET':
+          response = await http.get(uri, headers: finalHeaders);
+          break;
+        case 'POST':
+          response = await http.post(uri, headers: finalHeaders, body: processedBody);
+          break;
+        case 'PUT':
+          response = await http.put(uri, headers: finalHeaders, body: processedBody);
+          break;
+        case 'HEAD':
+          response = await http.head(uri, headers: finalHeaders);
+          break;
+        case 'DELETE':
+          response = await http.delete(uri, headers: finalHeaders, body: processedBody);
+          break;
+        default:
+          throw Exception('Unsupported HTTP method: $method');
+      }
+
+      if (_enableLogging) {
+        debugPrint('✅ Response [${response.statusCode}] for $url');
+        if (response.body.isNotEmpty) {
+          debugPrint('📄 Data: ${response.body.length > 500 ? "${response.body.substring(0, 500)}..." : response.body}');
+        }
+      }
+
+      return response;
+    } catch (e) {
+      if (_enableLogging) debugPrint('❌ Error for $url: $e');
+      rethrow;
+    }
+  }
+
   /// Login with username and password, returns JWT token or null on failure
   Future<LoginResponse?> login(String username, String password) async {
     try {
-      final response = await http.post(
-        Uri.parse('$backendUrl/auth/login'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      final response = await _makeRequest(
+        'POST',
+        '$backendUrl/auth/login',
+        authenticated: false,
+        body: {
           'username': username,
           'password': password,
-        }),
+        },
       );
 
       if (response.statusCode == 200) {
@@ -85,13 +157,14 @@ class AuthService {
   /// Register a new host (only for first host user)
   Future<RegisterResponse?> registerHost(String username, String password) async {
     try {
-      final response = await http.post(
-        Uri.parse('$backendUrl/auth/register-host'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
+      final response = await _makeRequest(
+        'POST',
+        '$backendUrl/auth/register-host',
+        authenticated: false,
+        body: {
           'username': username,
           'password': password,
-        }),
+        },
       );
 
       if (response.statusCode == 201) {
@@ -113,19 +186,13 @@ class AuthService {
   /// Create a new user (host-only)
   Future<bool> createUser(String username, String password) async {
     try {
-      final token = await getToken();
-      if (token == null) throw Exception('Not authenticated');
-
-      final response = await http.post(
-        Uri.parse('$backendUrl/auth/create-user'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
-        body: jsonEncode({
+      final response = await _makeRequest(
+        'POST',
+        '$backendUrl/auth/create-user',
+        body: {
           'username': username,
           'password': password,
-        }),
+        },
       );
 
       if (response.statusCode == 201) {
@@ -142,15 +209,9 @@ class AuthService {
   /// Delete a user (host-only)
   Future<bool> deleteUser(String userId) async {
     try {
-      final token = await getToken();
-      if (token == null) throw Exception('Not authenticated');
-
-      final response = await http.delete(
-        Uri.parse('$backendUrl/auth/users/$userId'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+      final response = await _makeRequest(
+        'DELETE',
+        '$backendUrl/auth/users/$userId',
       );
 
       if (response.statusCode == 200) {
@@ -189,10 +250,6 @@ class AuthService {
   }
 
   /// Check if user is authenticated AND the stored JWT has not expired.
-  ///
-  /// Decodes the base64 payload locally (no network call) to read `exp`.
-  /// If the token is expired it is automatically cleared from storage so
-  /// the user is redirected to login on the next app start.
   Future<bool> isAuthenticated() async {
     final token = await getToken();
     if (token == null || token.isEmpty) return false;
@@ -207,9 +264,6 @@ class AuthService {
   }
 
   /// Returns true when [token] is past its `exp` timestamp.
-  ///
-  /// Falls back to `false` (not expired) when the token cannot be parsed,
-  /// which keeps the app working if the backend ever issues tokens without `exp`.
   static bool isTokenExpired(String token) {
     try {
       final parts = token.split('.');
@@ -279,31 +333,19 @@ class AuthService {
   }
 
   /// Make authenticated HTTP GET request
-  Future<http.Response> authenticatedGet(String url) async {
-    final token = await getToken();
-    
-    return http.get(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-    );
-  }
+  Future<http.Response> authenticatedGet(String url) => _makeRequest('GET', url);
 
   /// Make authenticated HTTP POST request
-  Future<http.Response> authenticatedPost(String url, {Map<String, dynamic>? body}) async {
-    final token = await getToken();
-    
-    return http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-        if (token != null) 'Authorization': 'Bearer $token',
-      },
-      body: body != null ? jsonEncode(body) : null,
-    );
-  }
+  Future<http.Response> authenticatedPost(String url, {Object? body}) => _makeRequest('POST', url, body: body);
+
+  /// Make authenticated HTTP PUT request
+  Future<http.Response> authenticatedPut(String url, {Object? body}) => _makeRequest('PUT', url, body: body);
+
+  /// Make authenticated HTTP DELETE request
+  Future<http.Response> authenticatedDelete(String url, {Object? body}) => _makeRequest('DELETE', url, body: body);
+
+  /// Make authenticated HTTP HEAD request
+  Future<http.Response> authenticatedHead(String url) => _makeRequest('HEAD', url);
 
   /// Save token to secure storage
   Future<void> _saveToken(String token) async {
