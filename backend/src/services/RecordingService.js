@@ -49,7 +49,7 @@ async function acquireRecording(channelName) {
     const url = `${AGORA_RECORDING_API}/${AGORA_APP_ID}/cloud_recording/acquire`;
     const payload = {
       cname: channelName,
-      uid: '0',
+      uid: '1',
       clientRequest: {},
     };
 
@@ -92,7 +92,7 @@ async function startRecording(channelName, resourceId, userId, username) {
       throw new Error('Cloud Recording storage is not configured.');
     }
 
-    const recorderUid = 0;
+    const recorderUid = 1;
     const token = generateRtcToken(channelName, recorderUid, RtcRole.PUBLISHER);
 
     const payload = {
@@ -102,8 +102,8 @@ async function startRecording(channelName, resourceId, userId, username) {
         token,
         recordingConfig: {
           maxIdleTime: 30,
-          streamTypes: 0,
-          channelType: 0,
+          streamTypes: 2, // 2 for audio only, 0 for audio and video
+          channelType: 1, // 1 for Live Broadcasting, 0 for Communication
           subscribeUidGroup: 0,
         },
         storageConfig: {
@@ -177,7 +177,7 @@ async function stopRecording(channelName, resourceId, sid, mode = 'mix') {
 
     const payload = {
       cname: channelName,
-      uid: '0',
+      uid: '1',
       clientRequest: {},
     };
 

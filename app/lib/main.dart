@@ -22,7 +22,7 @@ Future<void> main() async {
     return true; // Return true to indicate the error is handled
   };
 
-  // Custom Error Widget for the "Red Screen of Death"
+  // Custom Error Widget for the "Red Screen of Deaths"
   ErrorWidget.builder = (FlutterErrorDetails details) => GlobalErrorScreen(
       error: details.exception.toString(),
       stackTrace: details.stack.toString(),
@@ -311,7 +311,6 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _checkAuthentication() async {
     final isAuth = await _authService.isAuthenticated();
     final isHost = await _authService.isHost();
-    if (!mounted) return;
     setState(() {
       _isAuthenticated = isAuth;
       _isHost = isHost;

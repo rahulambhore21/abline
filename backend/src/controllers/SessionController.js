@@ -25,7 +25,7 @@ exports.addUserToSession = async (req, res, next) => {
       // If host joins, ensure the session is marked active and recording starts
       // Only start if not already active to avoid redundant Agora calls
       if (!session || !session.isActive) {
-        const result = await startSessionInternal(sessionId);
+        const result = await startSessionInternal(sessionId, userId, username);
         session = result.session;
         console.log(`🎙️ Session ${sessionId} activated by Host join.`);
       } else {
@@ -94,7 +94,7 @@ exports.getSessionUsers = async (req, res) => {
 /**
  * Internal logic to start a session and its associated recording
  */
-async function startSessionInternal(sessionId) {
+async function startSessionInternal(sessionId, userId, username) {
   let session = await Session.findOne({ sessionId });
 
   // If session is already active and recording is on, don't re-start
@@ -122,7 +122,7 @@ async function startSessionInternal(sessionId) {
     // Only acquire and start if recording is not already marked as active in DB
     if (!session.recordingActive) {
       const resourceId = await acquireRecording(sessionId);
-      const recordingData = await startRecording(sessionId, resourceId);
+      const recordingData = await startRecording(sessionId, resourceId, userId, username);
 
       await Session.updateOne(
         { sessionId },
@@ -147,7 +147,8 @@ async function startSessionInternal(sessionId) {
 exports.startSession = async (req, res, next) => {
   try {
     const { id: sessionId } = req.params;
-    const { session, recordingActive } = await startSessionInternal(sessionId);
+    const { userId, username } = req.user;
+    const { session, recordingActive } = await startSessionInternal(sessionId, userId, username);
 
     res.status(200).json({
       success: true,
