@@ -58,7 +58,7 @@ const schemas = {
   // Session Schemas
   session: {
     start: Joi.object({
-      channelName: Joi.string().required().trim(),
+      id: Joi.string().required().trim(),
     }),
     addUser: Joi.object({
       userId: Joi.number().required(),
