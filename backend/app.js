@@ -48,18 +48,8 @@ app.get('/host', authController.getHost);
 
 // Recording compatibility
 app.use('/recordings', recordingRoutes);
-app.post(
-  '/start-recording',
-  authMiddleware,
-  allowRole('host'),
-  recordingController.startRecording
-);
-app.post(
-  '/stop-recording',
-  authMiddleware,
-  allowRole('host'),
-  recordingController.stopRecording
-);
+app.post('/start-recording', authMiddleware, allowRole('host'), recordingController.startRecording);
+app.post('/stop-recording', authMiddleware, allowRole('host'), recordingController.stopRecording);
 // -----------------------------------------------------------------
 
 // Global Error Handler

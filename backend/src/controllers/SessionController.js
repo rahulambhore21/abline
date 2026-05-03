@@ -96,7 +96,7 @@ exports.getSessionUsers = async (req, res) => {
  */
 async function startSessionInternal(sessionId) {
   let session = await Session.findOne({ sessionId });
-  
+
   // If session is already active and recording is on, don't re-start
   if (session && session.isActive && session.recordingActive) {
     console.log(`ℹ️ Session ${sessionId} is already active with recording.`);

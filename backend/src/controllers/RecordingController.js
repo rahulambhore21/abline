@@ -55,10 +55,10 @@ exports.startRecording = async (req, res, next) => {
     // Check if already active
     const active = activeRecordings.get(channelName);
     if (active) {
-      return res.status(200).json({ 
-        resourceId: active.resourceId, 
-        sid: active.sid, 
-        message: 'Recording is already active' 
+      return res.status(200).json({
+        resourceId: active.resourceId,
+        sid: active.sid,
+        message: 'Recording is already active',
       });
     }
 

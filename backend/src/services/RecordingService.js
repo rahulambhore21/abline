@@ -156,8 +156,10 @@ async function startRecording(channelName, resourceId, userId, username) {
     } catch (apiError) {
       const agoraError = apiError.response?.data;
       if (agoraError && agoraError.code === 53) {
-        console.warn(`ℹ️ Agora Task Conflict (code 53) for ${channelName}. Assuming already started.`);
-        return { resourceId, sid: 'ALREADY_STARTED' }; 
+        console.warn(
+          `ℹ️ Agora Task Conflict (code 53) for ${channelName}. Assuming already started.`
+        );
+        return { resourceId, sid: 'ALREADY_STARTED' };
       }
       console.error('❌ Agora Start API Call failed:', agoraError || apiError.message);
       throw apiError;
