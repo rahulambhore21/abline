@@ -31,9 +31,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
   // ✅ NEW: Recording management
   bool _isRecording = false;
-  bool _isTogatingRecording = false;
-  String _recordingResourceId = '';
-  String _recordingSid = '';
 
   @override
   void initState() {
@@ -145,6 +142,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         setState(() {
           _isHostLive = (data['isActive'] ?? false) as bool;
           _activeUsersInSession = (data['userCount'] ?? 0) as int;
+          // In our auto-recording flow, if host is live, recording is active
+          _isRecording = _isHostLive;
         });
       }
     } catch (e) {
