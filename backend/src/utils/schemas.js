@@ -4,17 +4,17 @@ const schemas = {
   // Auth Schemas
   auth: {
     login: Joi.object({
-      username: Joi.string().required().trim().min(3).max(30),
+      username: Joi.string().required().trim().min(2).max(30),
       password: Joi.string().required(),
     }),
     register: Joi.object({
-      username: Joi.string().required().trim().min(3).max(30),
-      password: Joi.string().required().min(6),
+      username: Joi.string().required().trim().min(2).max(30),
+      password: Joi.string().required().min(4),
       role: Joi.string().valid('user', 'host').default('user'),
     }),
     updateUser: Joi.object({
-      username: Joi.string().trim().min(3).max(30),
-      password: Joi.string().min(6),
+      username: Joi.string().trim().min(2).max(30),
+      password: Joi.string().min(4),
       role: Joi.string().valid('user', 'host'),
       isActive: Joi.boolean(),
     }),
