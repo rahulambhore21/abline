@@ -56,14 +56,22 @@ class AuthService {
     bool authenticated = true,
   }) async {
     final uri = Uri.parse(url);
-    final finalHeaders = {
-      'Content-Type': 'application/json',
-      ...?headers,
-    };
-
+    final upperMethod = method.toUpperCase();
+    
+    // ✅ Systemic Fix: Only add application/json if we have a body or it's a mutation
+    final finalHeaders = <String, String>{};
+    if (upperMethod == 'POST' || upperMethod == 'PUT' || upperMethod == 'PATCH' || body != null) {
+      finalHeaders['Content-Type'] = 'application/json';
+    }
+    
+    // Add custom headers
+    if (headers != null) {
+      finalHeaders.addAll(headers);
+    }
+    
     // ✅ Automatically JSON encode body if it's a Map or List
     Object? processedBody = body;
-    if (body != null && body is! String) {
+    if (body != null && body is! String && body is! List<int>) {
       processedBody = jsonEncode(body);
     }
 
@@ -75,13 +83,16 @@ class AuthService {
     }
 
     if (_enableLogging) {
-      debugPrint('🌐 API [$method] $url');
-      if (body != null) debugPrint('📦 Body: $body');
+      debugPrint('🌐 API [$upperMethod] $url');
+      if (body != null) {
+        final bodyStr = body.toString();
+        debugPrint('📦 Body: ${bodyStr.length > 500 ? "${bodyStr.substring(0, 500)}..." : bodyStr}');
+      }
     }
 
     try {
       late http.Response response;
-      switch (method.toUpperCase()) {
+      switch (upperMethod) {
         case 'GET':
           response = await http.get(uri, headers: finalHeaders);
           break;
@@ -90,6 +101,9 @@ class AuthService {
           break;
         case 'PUT':
           response = await http.put(uri, headers: finalHeaders, body: processedBody);
+          break;
+        case 'PATCH':
+          response = await http.patch(uri, headers: finalHeaders, body: processedBody);
           break;
         case 'HEAD':
           response = await http.head(uri, headers: finalHeaders);
@@ -103,8 +117,11 @@ class AuthService {
 
       if (_enableLogging) {
         debugPrint('✅ Response [${response.statusCode}] for $url');
-        if (response.body.isNotEmpty) {
+        final contentType = response.headers['content-type'] ?? '';
+        if (response.body.isNotEmpty && (contentType.contains('json') || contentType.contains('text'))) {
           debugPrint('📄 Data: ${response.body.length > 500 ? "${response.body.substring(0, 500)}..." : response.body}');
+        } else if (response.body.isNotEmpty) {
+          debugPrint('📄 Data: [Binary/Other Content: ${response.contentLength ?? response.bodyBytes.length} bytes]');
         }
       }
 
@@ -114,6 +131,23 @@ class AuthService {
       rethrow;
     }
   }
+
+  // --- Public Helper Methods ---
+
+  Future<http.Response> authenticatedGet(String url, {Map<String, String>? headers, bool authenticated = true}) => 
+      _makeRequest('GET', url, headers: headers, authenticated: authenticated);
+
+  Future<http.Response> authenticatedPost(String url, {Object? body, Map<String, String>? headers, bool authenticated = true}) => 
+      _makeRequest('POST', url, body: body, headers: headers, authenticated: authenticated);
+
+  Future<http.Response> authenticatedPut(String url, {Object? body, Map<String, String>? headers, bool authenticated = true}) => 
+      _makeRequest('PUT', url, body: body, headers: headers, authenticated: authenticated);
+
+  Future<http.Response> authenticatedHead(String url, {Map<String, String>? headers, bool authenticated = true}) => 
+      _makeRequest('HEAD', url, headers: headers, authenticated: authenticated);
+
+  Future<http.Response> authenticatedDelete(String url, {Object? body, Map<String, String>? headers, bool authenticated = true}) => 
+      _makeRequest('DELETE', url, body: body, headers: headers, authenticated: authenticated);
 
   /// Login with username and password, returns JWT token or null on failure
   Future<LoginResponse?> login(String username, String password) async {

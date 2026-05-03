@@ -88,7 +88,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
       final urlWithToken = '${recording.url}?token=${token ?? ''}';
       
       final response = await _authService
-          .authenticatedHead(urlWithToken)
+          .authenticatedHead(urlWithToken, authenticated: false)
           .timeout(const Duration(seconds: 5));
 
       final exists = response.statusCode == 200;
