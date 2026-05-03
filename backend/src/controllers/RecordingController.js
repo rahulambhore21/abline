@@ -156,7 +156,7 @@ exports.listRecordings = async (req, res, next) => {
         sessionId: r.sessionId,
         filename: r.filename,
         // Always use our proxy URL so we can handle authentication and S3 fetching
-        url: `${PUBLIC_URL}/recordings/download/${r.recordingId}`,
+        url: `${PUBLIC_URL}/recording/download/${r.recordingId}`,
         recordedAt: r.recordedAt,
         durationMs: r.durationMs,
         exists: r.exists, // Pass existence flag

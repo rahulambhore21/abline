@@ -189,7 +189,7 @@ class SpeakerTracker {
     try {
       final response = await authService!
           .authenticatedPost(
-            '$backendUrl/events/speaking',
+            '$backendUrl/session/events/speaking',
             body: event.toJson(),
           )
           .timeout(const Duration(seconds: 10));

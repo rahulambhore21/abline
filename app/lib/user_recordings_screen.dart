@@ -72,7 +72,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
     }
 
     try {
-      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true&page=$_currentPage&limit=20';
+      final url = '$_backendUrl/recording?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true&page=$_currentPage&limit=20';
       debugPrint('🌐 Fetching recordings from: $url');
 
       final response = await _authService

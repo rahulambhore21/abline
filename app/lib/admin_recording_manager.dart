@@ -61,7 +61,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
       // ✅ NEW: Load recordings with pagination
       try {
         final userRecordingsResponse = await _authService.authenticatedGet(
-          '${AppConfig.backendBaseUrl}/recordings/session/test_room?page=$_currentPage&limit=50',
+          '${AppConfig.backendBaseUrl}/recording/session/test_room?page=$_currentPage&limit=50',
         );
 
         if (userRecordingsResponse.statusCode == 200) {

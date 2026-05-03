@@ -715,13 +715,10 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _uploadRecording(File audioFile, int durationMs) async {
     try {
-      final token = await authService.getToken();
-      if (token == null) return;
-
       // 1. ✅ Request a Pre-signed URL (Optimization: Direct to S3)
       final filename = 'rec_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
       final responseUrl = await authService.authenticatedPost(
-        '$backendUrl/recordings/request-upload-url',
+        '$backendUrl/recording/request-upload-url',
         body: {
           'filename': filename,
           'contentType': 'audio/mp4',
@@ -757,7 +754,7 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
       // 3. ✅ Notify backend to save the record
       final s3Url = uploadUrl.split('?').first;
       final saveResponse = await authService.authenticatedPost(
-        '$backendUrl/recordings/save',
+        '$backendUrl/recording/save',
         body: {
           'userId': uid,
           'username': username,
