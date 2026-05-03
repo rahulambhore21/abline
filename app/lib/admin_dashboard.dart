@@ -54,7 +54,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .authenticatedGet('${AppConfig.backendBaseUrl}/users');
       if (usersResponse.statusCode == 200) {
         final data = jsonDecode(usersResponse.body);
-        setState(() => _totalUsers = data['count'] ?? 0);
+        setState(() => _totalUsers = (data['count'] ?? 0) as int);
       }
 
       // Fetch active recordings
@@ -62,7 +62,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .get(Uri.parse('${AppConfig.backendBaseUrl}/recording/active'));
       if (recordingsResponse.statusCode == 200) {
         final data = jsonDecode(recordingsResponse.body);
-        setState(() => _activeRecordings = data['count'] ?? 0);
+        setState(() => _activeRecordings = (data['count'] ?? 0) as int);
       }
 
       // Fetch speaking events
@@ -70,7 +70,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           .get(Uri.parse('${AppConfig.backendBaseUrl}/events/speaking'));
       if (eventsResponse.statusCode == 200) {
         final data = jsonDecode(eventsResponse.body);
-        setState(() => _totalSpeakingEvents = data['total'] ?? 0);
+        setState(() => _totalSpeakingEvents = (data['total'] ?? 0) as int);
       }
 
       // ✅ NEW: Fetch current session status
@@ -100,18 +100,19 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Debug: Check token
       final token = await _authService.getToken();
       final role = await _authService.getRole();
-      print('🔐 Token exists: ${token != null}, Role: $role');
-      print('🌐 Starting call at: ${AppConfig.backendBaseUrl}/session/$_currentSessionId/start');
+      debugPrint('🔐 Token exists: ${token != null}, Role: $role');
+      debugPrint('🌐 Starting call at: ${AppConfig.backendBaseUrl}/session/$_currentSessionId/start');
 
       final response = await _authService.authenticatedPost(
         '${AppConfig.backendBaseUrl}/session/$_currentSessionId/start',
         body: {'sessionId': _currentSessionId},
       );
 
-      print('📡 Start session response: ${response.statusCode}');
-      print('📄 Response body: ${response.body}');
+      debugPrint('📡 Start session response: ${response.statusCode}');
+      debugPrint('📄 Response body: ${response.body}');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        if (!mounted) return;
         setState(() {
           _isHostLive = true;
           _isStartingCall = false;
@@ -133,7 +134,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         }
       }
     } catch (e) {
-      print('❌ Error starting session: $e');
+      debugPrint('❌ Error starting session: $e');
+      if (!mounted) return;
       setState(() {
         _error = 'Failed to start call: $e';
         _isStartingCall = false;
@@ -156,6 +158,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
 
       if (response.statusCode == 200) {
+        if (!mounted) return;
         setState(() {
           _isHostLive = false;
           _activeUsersInSession = 0;
@@ -170,6 +173,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         throw Exception('Failed to stop session');
       }
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = 'Failed to stop call: $e');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -193,7 +197,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       // Generate a random UID for the recorder (0 is commonly used)
       const recorderUid = 0;
 
-      print('🎬 Starting recording for channel: $_currentSessionId');
+      debugPrint('🎬 Starting recording for channel: $_currentSessionId');
 
       final response = await _authService.authenticatedPost(
         '${AppConfig.backendBaseUrl}/recording/start',
@@ -203,11 +207,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
         },
       );
 
-      print('📡 Start recording response: ${response.statusCode}');
-      print('📄 Response body: ${response.body}');
+      debugPrint('📡 Start recording response: ${response.statusCode}');
+      debugPrint('📄 Response body: ${response.body}');
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (!mounted) return;
         setState(() {
           _isRecording = true;
           _recordingResourceId = (data['resourceId'] ?? '') as String;
@@ -230,7 +235,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         }
       }
     } catch (e) {
-      print('❌ Error starting recording: $e');
+      debugPrint('❌ Error starting recording: $e');
+      if (!mounted) return;
       setState(() {
         _error = 'Failed to start recording: $e';
         _isTogatingRecording = false;
@@ -254,7 +260,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
 
     try {
-      print('⏹️  Stopping recording for channel: $_currentSessionId');
+      debugPrint('⏹️  Stopping recording for channel: $_currentSessionId');
 
       final response = await _authService.authenticatedPost(
         '${AppConfig.backendBaseUrl}/recording/stop',
@@ -265,10 +271,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         },
       );
 
-      print('📡 Stop recording response: ${response.statusCode}');
-      print('📄 Response body: ${response.body}');
+      debugPrint('📡 Stop recording response: ${response.statusCode}');
+      debugPrint('📄 Response body: ${response.body}');
 
       if (response.statusCode == 200) {
+        if (!mounted) return;
         setState(() {
           _isRecording = false;
           _recordingResourceId = '';
@@ -285,7 +292,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         throw Exception('Failed to stop recording (Status: ${response.statusCode})');
       }
     } catch (e) {
-      print('❌ Error stopping recording: $e');
+      debugPrint('❌ Error stopping recording: $e');
+      if (!mounted) return;
       setState(() {
         _error = 'Failed to stop recording: $e';
         _isTogatingRecording = false;
@@ -299,22 +307,6 @@ class _AdminDashboardState extends State<AdminDashboard> {
     }
   }
 
-  /// ✅ NEW: Check how many users are in the current session
-  Future<void> _checkActiveUsers() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${AppConfig.backendBaseUrl}/session/$_currentSessionId/users'),
-      );
-
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() => _activeUsersInSession = (data['total'] ?? 0) as int);
-      }
-    } catch (e) {
-      print('Error checking active users: $e');
-    }
-  }
-
   /// ✅ NEW: Check if the session is currently active on the server
   Future<void> _checkSessionStatus() async {
     try {
@@ -325,30 +317,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        if (!mounted) return;
         setState(() {
           _isHostLive = (data['isActive'] ?? false) as bool;
           _activeUsersInSession = (data['userCount'] ?? 0) as int;
         });
       }
     } catch (e) {
-      print('❌ Error checking session status: $e');
+      debugPrint('❌ Error checking session status: $e');
     }
   }
 
   /// ✅ NEW: Join the call as host (participate in conversation)
   Future<void> _joinCall() async {
     try {
-      print('🎤 Host joining call as participant...');
+      debugPrint('🎤 Host joining call as participant...');
       if (!mounted) return;
       
-      unawaited(Navigator.push(
+      Navigator.push(
         context,
         MaterialPageRoute<void>(
           builder: (context) => const VoiceCallScreen(),
         ),
-      ));
+      );
     } catch (e) {
-      print('❌ Error joining call: $e');
+      debugPrint('❌ Error joining call: $e');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Error joining call: $e'),
@@ -357,6 +351,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
       );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -463,7 +458,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   const SizedBox(height: 12),
                   Text(
                     _isHostLive
-                        ? '✅ Call is active'
+                        ? '✅ Call is active ($_activeUsersInSession users online)'
                         : '❌ No active call',
                     style: const TextStyle(
                       color: Colors.white,
@@ -478,9 +473,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       if (!_isHostLive)
                         Expanded(
                           child: ElevatedButton.icon(
-                            onPressed: _joinCall,
+                            onPressed: _startCallSession,
                             icon: const Icon(Icons.bolt),
-                            label: const Text('Go Live / Join Call'),
+                            label: const Text('Start Call Session'),
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               foregroundColor: Colors.white,

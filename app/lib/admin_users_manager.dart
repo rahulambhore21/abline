@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'auth_service.dart';
@@ -121,7 +122,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
         final success = await _authService.deleteUser(userId);
         if (success) {
           _showSnackBar('User deleted successfully');
-          _loadUsers();
+          unawaited(_loadUsers());
         }
       } catch (e) {
         _showSnackBar('Error: $e', isError: true);
@@ -152,7 +153,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
   }
 
   void _showCreateUserDialog() {
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Create New User'),
@@ -204,7 +205,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
           ),
         ],
       ),
-    );
+    ));
   }
 
   @override
@@ -342,7 +343,8 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                 child: DataTable(
                   columnSpacing: 20,
                   headingRowHeight: 56,
-                  dataRowHeight: 60,
+                  dataRowMinHeight: 48,
+                  dataRowMaxHeight: 64,
                   columns: const [
                     DataColumn(
                       label: Text(

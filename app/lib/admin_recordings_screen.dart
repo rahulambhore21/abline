@@ -157,7 +157,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                       Icon(
                         Icons.error_outline,
                         size: 64,
-                        color: Colors.red.withOpacity(0.5),
+                        color: Colors.red.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(
@@ -184,7 +184,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                           Icon(
                             Icons.mic_none,
                             size: 64,
-                            color: Colors.white.withOpacity(0.3),
+                            color: Colors.white.withValues(alpha: 0.3),
                           ),
                           const SizedBox(height: 16),
                           const Text(
@@ -291,7 +291,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                                               '${recordings.length} clip${recordings.length != 1 ? 's' : ''} • ${_formatDuration(totalDuration)}',
                                               style: TextStyle(
                                                 color: Colors.white
-                                                    .withOpacity(0.6),
+                                                    .withValues(alpha: 0.6),
                                                 fontSize: 12,
                                               ),
                                             ),

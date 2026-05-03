@@ -21,7 +21,6 @@ linter:
     - comment_references
     - one_member_abstracts
     - only_throw_errors
-    - package_api_docs
     - prefer_const_constructors
     - prefer_const_constructors_in_immutables
     - prefer_const_declarations

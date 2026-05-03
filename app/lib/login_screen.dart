@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
 
@@ -56,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (mounted && response != null) {
         // Route based on user role
         final route = response.role == 'host' ? '/admin' : '/home';
-        Navigator.of(context).pushReplacementNamed(route);
+        unawaited(Navigator.of(context).pushReplacementNamed(route));
       }
     } catch (e) {
       if (mounted) {

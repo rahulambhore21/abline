@@ -1,0 +1,59 @@
+Analyzing app...                                                
+
+warning - The declaration '_checkActiveUsers' isn't referenced - lib\admin_dashboard.dart:311:16 - unused_element
+   info - Missing an 'await' for the 'Future' computed by this expression - lib\admin_dashboard.dart:354:17 - unawaited_futures
+warning - The value of the field '_allSessionRecordings' isn't used - lib\admin_recording_manager.dart:21:19 - unused_field
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:62:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:63:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:67:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:68:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:89:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:90:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:91:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:93:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:94:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:97:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:98:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recording_manager.dart:108:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\admin_recording_manager.dart:385:66 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\admin_recordings_screen.dart:80:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recordings_screen.dart:89:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recordings_screen.dart:109:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\admin_recordings_screen.dart:122:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\admin_user_recordings_screen.dart:73:51 - deprecated_member_use
+   info - Angle brackets will be interpreted as HTML - lib\app_config.dart:4:50 - unintended_html_in_doc_comment
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\call_status_banners.dart:64:22 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\home_screen.dart:75:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\home_screen.dart:92:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\home_screen.dart:93:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\home_screen.dart:94:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\home_screen.dart:95:5 - avoid_print
+   info - Don't invoke 'print' in production code - lib\home_screen.dart:127:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\home_screen.dart:284:52 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\home_screen.dart:285:50 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\home_screen.dart:370:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\home_screen.dart:372:68 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\home_screen.dart:442:50 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\home_screen.dart:444:69 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\mic_button.dart:58:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\mic_button.dart:68:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\mic_button.dart:108:37 - deprecated_member_use
+   info - Unnecessary use of multiple underscores - lib\participants_talking_panel.dart:56:43 - unnecessary_underscores
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\participants_talking_panel.dart:100:53 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\participants_talking_panel.dart:139:39 - deprecated_member_use
+   info - Unnecessary use of a block function body - lib\recording_list_widget.dart:83:45 - prefer_expression_function_bodies
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\recording_list_widget.dart:344:40 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\recording_list_widget.dart:348:42 - deprecated_member_use
+   info - Don't invoke 'print' in production code - lib\speaker_tracker.dart:154:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\speaker_tracker.dart:171:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\speaker_tracker.dart:174:11 - avoid_print
+   info - Don't invoke 'print' in production code - lib\speaker_tracker.dart:205:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\speaker_tracker.dart:207:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\speaker_tracker.dart:210:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\user_recordings_screen.dart:52:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\user_recordings_screen.dart:66:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\user_recordings_screen.dart:67:7 - avoid_print
+   info - Don't invoke 'print' in production code - lib\user_recordings_screen.dart:76:9 - avoid_print
+   info - Don't invoke 'print' in production code - lib\user_recordings_screen.dart:108:7 - avoid_print
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\user_recordings_screen.dart:148:43 - deprecated_member_use
+
