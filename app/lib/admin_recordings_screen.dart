@@ -285,6 +285,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                                                 fontWeight: FontWeight.bold,
                                                 fontSize: 18,
                                               ),
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                             const SizedBox(height: 4),
                                             Text(

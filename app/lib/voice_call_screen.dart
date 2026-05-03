@@ -92,39 +92,45 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFF2a2a2a),
         body: SafeArea(
-        child: Column(
-          children: [
-            // ── Top bar ──────────────────────────────────────────────────
-            Padding(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => _handleExit(context),
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: Colors.white30),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(Icons.arrow_back,
-                          color: Colors.white, size: 20),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Text(
-                    'Hello, ${_ctrl.username}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
+          child: LayoutBuilder(
+            builder: (context, constraints) => SingleChildScrollView(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                  child: IntrinsicHeight(
+                    child: Column(
+                      children: [
+                        // ── Top bar ──────────────────────────────────────────────────
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          child: Row(
+                            children: [
+                              GestureDetector(
+                                onTap: () => _handleExit(context),
+                                child: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    border: Border.all(color: Colors.white30),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Icon(Icons.arrow_back, color: Colors.white, size: 20),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  'Hello, ${_ctrl.username}',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
 
             // ─── Status banners ───────────────────────────────────────────
             CallStatusBanners(
@@ -152,48 +158,54 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 40),
+                        const SizedBox(height: 24),
 
-            // ── Mic button ───────────────────────────────────────────────
-            Expanded(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  MicButton(
-                    isHost: _ctrl.isHost,
-                    isConnected: _ctrl.isConnected,
-                    isJoining: _ctrl.isJoining,
-                    isMuted: _ctrl.isMuted,
-                    isSessionActive: _ctrl.isSessionActive,
-                    isRecordingAudio: _ctrl.isRecordingAudio,
-                    onTap: _ctrl.toggleMute,
-                    onTapDown: _ctrl.unmute,
-                    onTapUp: _ctrl.mute,
-                    onTapCancel: _ctrl.mute,
+                        // ── Mic button ───────────────────────────────────────────────
+                        Expanded(
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              MicButton(
+                                isHost: _ctrl.isHost,
+                                isConnected: _ctrl.isConnected,
+                                isJoining: _ctrl.isJoining,
+                                isMuted: _ctrl.isMuted,
+                                isSessionActive: _ctrl.isSessionActive,
+                                isRecordingAudio: _ctrl.isRecordingAudio,
+                                onTap: _ctrl.toggleMute,
+                                onTapDown: _ctrl.unmute,
+                                onTapUp: _ctrl.mute,
+                                onTapCancel: _ctrl.mute,
+                              ),
+                              const SizedBox(height: 24),
+                              _StatusLabel(ctrl: _ctrl),
+                            ],
+                          ),
+                        ),
+
+                        // ── Participants panel (host only) ────────────────────────────
+                        if (_ctrl.isConnected &&
+                            _ctrl.remoteUsers.isNotEmpty &&
+                            _ctrl.isHost)
+                          SizedBox(
+                            height: 250, // Constrain height in a scrollable view
+                            child: ParticipantsTalkingPanel(
+                              speakerTracker: _ctrl.speakerTracker,
+                              usernames: _ctrl.usernames,
+                            ),
+                          ),
+
+                        // ✅ Bottom padding that adapts to system navigation bar
+                        SizedBox(height: 16 + MediaQuery.of(context).padding.bottom),
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 32),
-                  _StatusLabel(ctrl: _ctrl),
-                ],
+                ),
               ),
             ),
-
-            // ── Participants panel (host only) ────────────────────────────
-            if (_ctrl.isConnected &&
-                _ctrl.remoteUsers.isNotEmpty &&
-                _ctrl.isHost)
-              ParticipantsTalkingPanel(
-                speakerTracker: _ctrl.speakerTracker,
-                usernames: _ctrl.usernames,
-              ),
-
-            // ✅ Bottom padding that adapts to system navigation bar
-            SizedBox(height: 16 + MediaQuery.of(context).padding.bottom),
-          ],
+          ),
         ),
-      ),
-
-    ),
-  );
+      );
 
   Future<void> _handleExit(BuildContext context) async {
     // Show a small overlay to prevent interaction while leaving

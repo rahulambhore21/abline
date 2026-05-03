@@ -215,15 +215,16 @@ class _HomeScreenState extends State<HomeScreen> {
               // Main card
               Expanded(
                 child: Container(
-                  padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
                     color: const Color(0xFF3a3a3a),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: Colors.white10),
                   ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
                       // Welcome text
                       Text(
                         'Welcome, $_loggedInUsername!',
@@ -498,6 +499,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       // ✅ Extra spacing for navigation bar
                       SizedBox(height: MediaQuery.of(context).padding.bottom),
                     ],
+                    ),
                   ),
                 ),
               ),
@@ -505,7 +507,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
-
     );
   }
 }

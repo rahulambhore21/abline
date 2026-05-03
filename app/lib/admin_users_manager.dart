@@ -334,96 +334,99 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
                 ),
               )
             else
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF3a3a3a),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: DataTable(
-                  columnSpacing: 20,
-                  headingRowHeight: 56,
-                  dataRowMinHeight: 48,
-                  dataRowMaxHeight: 64,
-                  columns: const [
-                    DataColumn(
-                      label: Text(
-                        'Username',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'Role',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                    DataColumn(
-                      label: Text(
-                        'Actions',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ],
-                  rows: _users.map((user) => DataRow(
-                      cells: [
-                        DataCell(
-                          Text(
-                            (user['username'] ?? 'Unknown') as String,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w500,
-                              fontSize: 15,
-                            ),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF3a3a3a),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: DataTable(
+                    columnSpacing: 20,
+                    headingRowHeight: 56,
+                    dataRowMinHeight: 48,
+                    dataRowMaxHeight: 64,
+                    columns: const [
+                      DataColumn(
+                        label: Text(
+                          'Username',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
                           ),
                         ),
-                        DataCell(
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: user['role'] == 'host'
-                                  ? Colors.orange.withValues(alpha: 0.2)
-                                  : Colors.blue.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: Text(
-                              (user['role'] ?? 'user') as String,
-                              style: TextStyle(
-                                color: user['role'] == 'host'
-                                    ? Colors.orange
-                                    : Colors.blue,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Role',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      DataColumn(
+                        label: Text(
+                          'Actions',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                    rows: _users.map((user) => DataRow(
+                        cells: [
+                          DataCell(
+                            Text(
+                              (user['username'] ?? 'Unknown') as String,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w500,
+                                fontSize: 15,
                               ),
                             ),
                           ),
-                        ),
-                        DataCell(
-                          user['role'] == 'host'
-                              ? const SizedBox.shrink()
-                              : IconButton(
-                                  icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                  onPressed: () => _deleteUser(user['id'] as String, (user['username'] ?? 'Unknown') as String),
-                                  tooltip: 'Delete User',
+                          DataCell(
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: user['role'] == 'host'
+                                    ? Colors.orange.withValues(alpha: 0.2)
+                                    : Colors.blue.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                (user['role'] ?? 'user') as String,
+                                style: TextStyle(
+                                  color: user['role'] == 'host'
+                                      ? Colors.orange
+                                      : Colors.blue,
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
                                 ),
-                        ),
-                      ],
-                    )).toList(),
+                              ),
+                            ),
+                          ),
+                          DataCell(
+                            user['role'] == 'host'
+                                ? const SizedBox.shrink()
+                                : IconButton(
+                                    icon: const Icon(Icons.delete, color: Colors.redAccent),
+                                    onPressed: () => _deleteUser(user['id'] as String, (user['username'] ?? 'Unknown') as String),
+                                    tooltip: 'Delete User',
+                                  ),
+                          ),
+                        ],
+                      )).toList(),
+                  ),
                 ),
               ),
           ],
