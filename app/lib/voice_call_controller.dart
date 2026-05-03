@@ -674,6 +674,11 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> startAudioRecording() async {
     try {
+      if (!await audioRecorder.hasPermission()) {
+        onError?.call('Microphone permission required for recording');
+        return;
+      }
+
       final dir = _appDocDir ?? await getApplicationDocumentsDirectory();
       final filePath =
           '${dir.path}/recording_${uid}_${DateTime.now().millisecondsSinceEpoch}.m4a';
@@ -725,7 +730,9 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
         },
       ).timeout(const Duration(seconds: 10));
 
+      debugPrint('📦 Request Upload URL Response: ${responseUrl.statusCode}');
       if (responseUrl.statusCode != 200) {
+        debugPrint('❌ Failed to get upload URL: ${responseUrl.body}');
         throw Exception('Failed to get upload URL: ${responseUrl.statusCode}');
       }
       
@@ -746,8 +753,11 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
 
       final uploadStreamedResponse = await request.send().timeout(const Duration(seconds: 120));
       final uploadStatusCode = uploadStreamedResponse.statusCode;
+      debugPrint('📤 S3 Upload Response: $uploadStatusCode');
 
-      if (uploadStatusCode != 200) {
+      if (uploadStatusCode != 200 && uploadStatusCode != 201 && uploadStatusCode != 204) {
+        final respStr = await uploadStreamedResponse.stream.bytesToString();
+        debugPrint('❌ S3 Upload Error: $respStr');
         throw Exception('S3 Direct Upload failed: $uploadStatusCode');
       }
 
@@ -765,6 +775,7 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
         },
       ).timeout(const Duration(seconds: 15));
 
+      debugPrint('💾 Save Recording Response: ${saveResponse.statusCode}');
       if (saveResponse.statusCode == 200 || saveResponse.statusCode == 201) {
         final data = jsonDecode(saveResponse.body);
         userRecordings.add(Recording(

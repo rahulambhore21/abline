@@ -85,10 +85,11 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
   Future<bool> _verifyRecordingExists(Recording recording) async {
     try {
       final token = await _authService.getToken();
-      final urlWithToken = '${recording.url}?token=${token ?? ''}';
+      // Use backend proxy instead of raw S3 URL for existence check
+      final proxyUrl = '${widget.backendUrl}/recording/download/${recording.id}?token=${token ?? ''}';
       
       final response = await _authService
-          .authenticatedHead(urlWithToken, authenticated: false)
+          .authenticatedHead(proxyUrl, authenticated: false)
           .timeout(const Duration(seconds: 5));
 
       final exists = response.statusCode == 200;
@@ -173,11 +174,11 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
         throw Exception('Authentication token not found');
       }
 
-      // Add token as query parameter for better compatibility with audio players
-      final urlWithToken = '${recording.url}?token=$token';
+      // Use backend proxy instead of raw S3 URL for playback
+      final urlWithToken = '${widget.backendUrl}/recording/download/${recording.id}?token=$token';
       debugPrint('🎵 === PLAYING RECORDING ===');
       debugPrint('📝 Recording ID: ${recording.id}');
-      debugPrint('📝 Original URL: ${recording.url}');
+      debugPrint('📝 Proxy URL: $urlWithToken');
       debugPrint('🔗 URL with token: $urlWithToken');
       debugPrint('📝 Filename: ${recording.filename}');
       debugPrint('⏱️  Duration: ${recording.durationMs}ms');
