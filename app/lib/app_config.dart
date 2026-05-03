@@ -7,9 +7,8 @@
 class AppConfig {
   static const String backendUrl = String.fromEnvironment(
     'BACKEND_URL',
-    // DEFAULT: Use local IP for testing on real devices in same Wi-Fi
-    // PRODUCTION: https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud
-    defaultValue: 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud',
+    // PRODUCTION: https://abline.admarktech.cloud
+    defaultValue: 'https://abline.admarktech.cloud',
   );
 
   static const String agoraAppId = String.fromEnvironment(
