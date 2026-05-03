@@ -17,11 +17,11 @@ describe('Auth Integration Tests', () => {
     it('should return host username if host exists', async () => {
       User.findOne.mockReturnValue({
         select: jest.fn().mockReturnThis(),
-        lean: jest.fn().mockResolvedValue({ username: 'prakash_kaka' })
+        lean: jest.fn().mockResolvedValue({ username: 'prakash_kaka' }),
       });
 
       const res = await request(app).get('/auth/host');
-      
+
       expect(res.statusCode).toEqual(200);
       expect(res.body).toHaveProperty('username', 'prakash_kaka');
     });
@@ -29,11 +29,11 @@ describe('Auth Integration Tests', () => {
     it('should return null if no host exists', async () => {
       User.findOne.mockReturnValue({
         select: jest.fn().mockReturnThis(),
-        lean: jest.fn().mockResolvedValue(null)
+        lean: jest.fn().mockResolvedValue(null),
       });
 
       const res = await request(app).get('/auth/host');
-      
+
       expect(res.statusCode).toEqual(200);
       expect(res.body).toHaveProperty('username', null);
     });
@@ -41,10 +41,8 @@ describe('Auth Integration Tests', () => {
 
   describe('POST /auth/login', () => {
     it('should return 400 if missing fields', async () => {
-      const res = await request(app)
-        .post('/auth/login')
-        .send({ username: 'test' });
-      
+      const res = await request(app).post('/auth/login').send({ username: 'test' });
+
       expect(res.statusCode).toEqual(400);
       expect(res.body).toHaveProperty('error', 'Missing required fields: username, password');
     });

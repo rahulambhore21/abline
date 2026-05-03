@@ -8,7 +8,6 @@ router.post('/stop', authMiddleware, allowRole('host'), recordingController.stop
 router.post('/save', authMiddleware, recordingController.saveRecording); // Flutter app uploads
 router.post('/request-upload-url', authMiddleware, recordingController.requestUploadUrl);
 
-
 router.post('/webhook', recordingController.webhook);
 router.get('/', authMiddleware, recordingController.listRecordings);
 router.get('/active', authMiddleware, recordingController.activeRecordings);

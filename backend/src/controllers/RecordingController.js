@@ -1,11 +1,11 @@
-const { acquireRecording, startRecording, stopRecording, activeRecordings } = require('../services/RecordingService');
+const {
+  acquireRecording,
+  startRecording,
+  stopRecording,
+  activeRecordings,
+} = require('../services/RecordingService');
 const Recording = require('../models/Recording');
-const User = require('../models/User');
-const path = require('path');
-const fs = require('fs');
 const { uploadToS3, getPresignedUrl } = require('../services/S3Service');
-
-
 
 const config = require('../config');
 
@@ -17,24 +17,22 @@ async function initializeRecordingsStorage() {
   try {
     console.log('🔄 Initializing recordings storage from database...');
     const recordings = await Recording.find().lean();
-    
+
     // Also initialize active recording sessions
     const recordingService = require('../services/RecordingService');
     await recordingService.initializeActiveRecordings();
-    
+
     console.log(`✅ Recording system initialized. Database has ${recordings.length} records.`);
 
-    
     // Log a few IDs for verification
     if (recordings.length > 0) {
-      const sampleIds = recordings.slice(0, 3).map(r => r.recordingId);
+      const sampleIds = recordings.slice(0, 3).map((r) => r.recordingId);
       console.log('📋 Sample recording IDs:', sampleIds);
     }
   } catch (err) {
     console.error('⚠️ Failed to initialize recordings storage:', err.message);
   }
 }
-
 
 // Redundant functions removed (saveRecordingsToDisk)
 
@@ -57,7 +55,7 @@ exports.startRecording = async (req, res, next) => {
     const resourceId = await acquireRecording(channelName);
     const userId = req.body.userId || req.user?.id;
     const username = req.body.username || req.user?.username;
-    
+
     const { sid } = await startRecording(channelName, resourceId, userId, username);
     res.status(201).json({ resourceId, sid, message: 'Recording started successfully' });
   } catch (error) {
@@ -76,7 +74,10 @@ exports.stopRecording = async (req, res, next) => {
 
     if (!resolvedResourceId || !resolvedSid) {
       const active = activeRecordings.get(channelName);
-      if (!active) return res.status(400).json({ error: `No active recording found for channel: ${channelName}` });
+      if (!active)
+        return res
+          .status(400)
+          .json({ error: `No active recording found for channel: ${channelName}` });
       resolvedResourceId = active.resourceId;
       resolvedSid = active.sid;
       resolvedMode = active.mode || 'mix';
@@ -96,7 +97,7 @@ exports.listRecordings = async (req, res, next) => {
     const sessionId = req.query.sessionId || req.params.sessionId;
     const shouldVerify = verify !== 'false';
     const filter = {};
-    
+
     if (sessionId) filter.sessionId = sessionId;
 
     if (req.user.role !== 'host') {
@@ -132,7 +133,7 @@ exports.listRecordings = async (req, res, next) => {
 
     // Group by user for the admin dashboard
     const byUser = {};
-    const formattedRecordings = recordings.map(r => {
+    const formattedRecordings = recordings.map((r) => {
       const formatted = {
         id: r.recordingId,
         userId: r.userId,
@@ -146,13 +147,10 @@ exports.listRecordings = async (req, res, next) => {
         exists: r.exists, // Pass existence flag
       };
 
-
-
       const userKey = r.username || 'Unknown';
       if (!byUser[userKey]) byUser[userKey] = [];
       byUser[userKey].push(formatted);
 
-      
       return formatted;
     });
 
@@ -166,13 +164,13 @@ exports.listRecordings = async (req, res, next) => {
   }
 };
 
-
 exports.saveRecording = async (req, res, next) => {
   try {
     const { userId, sessionId, durationMs, username, url, filename: providedFilename } = req.body;
     const audioFile = req.files?.audioFile;
-    
-    if (!userId || !sessionId) return res.status(400).json({ error: 'Missing userId or sessionId' });
+
+    if (!userId || !sessionId)
+      return res.status(400).json({ error: 'Missing userId or sessionId' });
 
     let finalUrl = url;
     let recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
@@ -198,7 +196,9 @@ exports.saveRecording = async (req, res, next) => {
     };
 
     const recording = await Recording.create(recordingData);
-    res.status(201).json({ success: true, recordingId, url: recording.url, recordedAt: recording.recordedAt });
+    res
+      .status(201)
+      .json({ success: true, recordingId, url: recording.url, recordedAt: recording.recordedAt });
   } catch (error) {
     next(error);
   }
@@ -216,7 +216,6 @@ exports.requestUploadUrl = async (req, res, next) => {
   }
 };
 
-
 exports.downloadRecording = async (req, res) => {
   try {
     const { recordingId } = req.params;
@@ -226,15 +225,19 @@ exports.downloadRecording = async (req, res) => {
 
     // --- AUTHORIZATION CHECK ---
     // Only allow the owner or a host to download the recording
-    const isOwner = req.user.username && recording.username && 
-                   req.user.username.toLowerCase() === recording.username.toLowerCase();
+    const isOwner =
+      req.user.username &&
+      recording.username &&
+      req.user.username.toLowerCase() === recording.username.toLowerCase();
     const isHost = req.user.role === 'host';
 
     if (!isOwner && !isHost) {
-      console.warn(`🔐 Unauthorized download attempt: User ${req.user.username} tried to access recording ${recordingId} owned by ${recording.username}`);
-      return res.status(403).json({ 
-        error: 'Forbidden', 
-        message: 'You do not have permission to download this recording' 
+      console.warn(
+        `🔐 Unauthorized download attempt: User ${req.user.username} tried to access recording ${recordingId} owned by ${recording.username}`
+      );
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You do not have permission to download this recording',
       });
     }
     // ----------------------------
@@ -244,7 +247,7 @@ exports.downloadRecording = async (req, res) => {
       try {
         const { getS3FileStream } = require('../services/S3Service');
         const stream = await getS3FileStream(recording.filename);
-        
+
         res.setHeader('Content-Type', 'audio/mp4');
         res.setHeader('Accept-Ranges', 'bytes');
         return stream.pipe(res);
@@ -262,13 +265,12 @@ exports.downloadRecording = async (req, res) => {
   }
 };
 
-
 exports.activeRecordings = (req, res) => {
   const recordings = Array.from(activeRecordings.values());
-  res.json({ 
+  res.json({
     success: true,
     count: recordings.length,
-    recordings 
+    recordings,
   });
 };
 
@@ -276,25 +278,31 @@ exports.webhook = async (req, res) => {
   try {
     const { sid, cname, fileList } = req.body;
     console.log(`🔔 Agora Webhook received for session: ${cname}, SID: ${sid}`);
-    
+
     if (!fileList || fileList.length === 0) {
       console.log('ℹ️ Webhook contained no files.');
       return res.status(200).json({ status: 'processed' });
     }
 
     const ActiveRecording = require('../models/ActiveRecording');
-    const activeRec = await ActiveRecording.findOne({ sid }).lean() || await ActiveRecording.findOne({ channelName: cname }).lean();
-    
+    const activeRec =
+      (await ActiveRecording.findOne({ sid }).lean()) ||
+      (await ActiveRecording.findOne({ channelName: cname }).lean());
+
     if (activeRec) {
-      console.log(`ℹ️ Found metadata for session: User=${activeRec.username}, ID=${activeRec.userId}`);
+      console.log(
+        `ℹ️ Found metadata for session: User=${activeRec.username}, ID=${activeRec.userId}`
+      );
     } else {
-      console.warn(`⚠️ No active recording metadata found for SID: ${sid}. Recording will have default metadata.`);
+      console.warn(
+        `⚠️ No active recording metadata found for SID: ${sid}. Recording will have default metadata.`
+      );
     }
 
     for (const file of fileList) {
       const { filename, uid } = file;
       console.log(`   - Processing file: ${filename} for UID: ${uid}`);
-      
+
       const uidMatch = filename.match(/uid_(\d+)/);
       const userId = activeRec?.userId || (uidMatch ? Number(uidMatch[1]) : Number(uid));
       const username = activeRec?.username || 'Unknown';
@@ -324,6 +332,5 @@ exports.webhook = async (req, res) => {
     res.status(200).json({ status: 'processed', error: error.message });
   }
 };
-
 
 exports.initializeRecordingsStorage = initializeRecordingsStorage;

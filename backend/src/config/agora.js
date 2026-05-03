@@ -33,7 +33,7 @@ function validateRecordingCredentials() {
 function generateRtcToken(channelName, uid, role = RtcRole.PUBLISHER) {
   const currentTimestamp = Math.floor(Date.now() / 1000);
   const privilegeExpire = currentTimestamp + TOKEN_TTL;
-  
+
   return RtcTokenBuilder.buildTokenWithUid(
     AGORA_APP_ID,
     AGORA_APP_CERTIFICATE,

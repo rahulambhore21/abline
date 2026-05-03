@@ -127,7 +127,7 @@ exports.listUsers = async (req, res, next) => {
 
     res.json({
       success: true,
-      users: users.map(u => ({
+      users: users.map((u) => ({
         id: u._id,
         username: u.username,
         role: u.role,

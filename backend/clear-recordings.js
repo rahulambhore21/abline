@@ -37,7 +37,7 @@ async function clearAllRecordings() {
     if (fs.existsSync(RECORDINGS_DIR)) {
       const files = fs.readdirSync(RECORDINGS_DIR);
       let deletedCount = 0;
-      
+
       for (const file of files) {
         const filePath = path.join(RECORDINGS_DIR, file);
         try {
@@ -48,7 +48,7 @@ async function clearAllRecordings() {
           console.error(`   ❌ Error deleting ${file}:`, error.message);
         }
       }
-      
+
       console.log(`✅ Deleted ${deletedCount} recording files from disk\n`);
     } else {
       console.log('⚠️  Recordings directory does not exist\n');

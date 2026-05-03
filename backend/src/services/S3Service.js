@@ -1,7 +1,10 @@
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
-const path = require('path');
-
 
 const config = require('../config');
 
@@ -10,8 +13,8 @@ let _s3Client = null;
 function getS3Client() {
   if (_s3Client) return _s3Client;
 
-  const { region, accessKey, secretKey, awsRegion } = config.storage;
-  
+  const { accessKey, secretKey, awsRegion } = config.storage;
+
   console.log(`🛠️  Initializing S3 Client: Region=${awsRegion}`);
 
   _s3Client = new S3Client({
@@ -21,23 +24,21 @@ function getS3Client() {
       secretAccessKey: secretKey,
     },
   });
-  
+
   return _s3Client;
 }
 
-
-
 /**
  * Uploads a file to S3
- * @param {Buffer|ReadableStream} fileContent 
- * @param {string} filename 
- * @param {string} contentType 
+ * @param {Buffer|ReadableStream} fileContent
+ * @param {string} filename
+ * @param {string} contentType
  * @returns {Promise<string>} The public URL of the uploaded file
  */
 async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
   const bucket = process.env.RECORDING_BUCKET;
   if (!bucket) throw new Error('RECORDING_BUCKET is not defined in .env');
-  
+
   const client = getS3Client();
   console.log(`📡 Preparing S3 upload: Bucket=${bucket}, File=${filename}`);
 
@@ -50,7 +51,7 @@ async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
 
   try {
     await client.send(command);
-    
+
     const { bucket, awsRegion } = config.storage;
     const url = `https://${bucket}.s3.${awsRegion}.amazonaws.com/${filename}`;
     console.log(`✅ S3 Upload successful: ${url}`);
@@ -63,7 +64,7 @@ async function uploadToS3(fileContent, filename, contentType = 'audio/mpeg') {
 
 /**
  * Gets a file from S3 as a stream
- * @param {string} filename 
+ * @param {string} filename
  * @returns {Promise<ReadableStream>}
  */
 async function getS3FileStream(filename) {
@@ -83,8 +84,8 @@ async function getS3FileStream(filename) {
 
 /**
  * Generates a pre-signed URL for direct upload to S3
- * @param {string} filename 
- * @param {string} contentType 
+ * @param {string} filename
+ * @param {string} contentType
  * @returns {Promise<string>}
  */
 async function getPresignedUrl(filename, contentType = 'audio/mp4') {
@@ -103,7 +104,7 @@ async function getPresignedUrl(filename, contentType = 'audio/mp4') {
 
 /**
  * Deletes a file from S3
- * @param {string} filename 
+ * @param {string} filename
  * @returns {Promise<void>}
  */
 async function deleteFromS3(filename) {
@@ -130,5 +131,3 @@ module.exports = {
   getPresignedUrl,
   deleteFromS3,
 };
-
-

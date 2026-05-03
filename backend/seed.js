@@ -7,7 +7,8 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const MONGODB_URI = "mongodb+srv://Vercel-Admin-abline:mH0AtaeqnjGVIg7c@abline.rzfhc4g.mongodb.net/?retryWrites=true&w=majority";
+const MONGODB_URI =
+  'mongodb+srv://Vercel-Admin-abline:mH0AtaeqnjGVIg7c@abline.rzfhc4g.mongodb.net/?retryWrites=true&w=majority';
 
 // Define User Schema
 const UserSchema = new mongoose.Schema(

@@ -12,7 +12,7 @@ async function cleanupOldRecordings() {
     console.log(`🧹 Starting cleanup for recordings older than: ${sevenDaysAgo.toISOString()}`);
 
     const oldRecordings = await Recording.find({
-      recordedAt: { $lt: sevenDaysAgo }
+      recordedAt: { $lt: sevenDaysAgo },
     });
 
     if (oldRecordings.length === 0) {
@@ -34,7 +34,7 @@ async function cleanupOldRecordings() {
 
         // Delete from MongoDB
         await Recording.deleteOne({ _id: recording._id });
-        
+
         successCount++;
         console.log(`   ✅ Deleted recording: ${recording.recordingId}`);
       } catch (err) {
@@ -59,11 +59,11 @@ function initCleanupTask() {
   // Schedule to run every 24 hours
   const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
   setInterval(cleanupOldRecordings, TWENTY_FOUR_HOURS);
-  
+
   console.log('⏰ Recordings cleanup task scheduled to run every 24 hours.');
 }
 
 module.exports = {
   cleanupOldRecordings,
-  initCleanupTask
+  initCleanupTask,
 };

@@ -41,16 +41,28 @@ app.get('/agora/token', apiLimiter, agoraController.getToken);
 
 // --- LEGACY COMPATIBILITY ROUTES (Root level paths used by older frontend) ---
 // Session/Speaking events
-app.use('/', apiLimiter, sessionRoutes); 
+app.use('/', apiLimiter, sessionRoutes);
 
 // Auth compatibility (Secure them same as modular routes)
 app.get('/users', apiLimiter, authMiddleware, allowRole('host'), authController.listUsers);
 app.get('/host', apiLimiter, authController.getHost);
 
 // Recording compatibility
-app.use('/recordings', apiLimiter, recordingRoutes); 
-app.post('/start-recording', apiLimiter, authMiddleware, allowRole('host'), recordingController.startRecording);
-app.post('/stop-recording', apiLimiter, authMiddleware, allowRole('host'), recordingController.stopRecording);
+app.use('/recordings', apiLimiter, recordingRoutes);
+app.post(
+  '/start-recording',
+  apiLimiter,
+  authMiddleware,
+  allowRole('host'),
+  recordingController.startRecording
+);
+app.post(
+  '/stop-recording',
+  apiLimiter,
+  authMiddleware,
+  allowRole('host'),
+  recordingController.stopRecording
+);
 // -----------------------------------------------------------------
 
 // Global Error Handler
@@ -67,7 +79,7 @@ const start = async () => {
       const dbHost = mongoose.connection.host;
       console.log(`📡 Connected to MongoDB: ${dbName} on ${dbHost}`);
     }
-    
+
     // Initialize recording storage after DB attempt
     console.log('📦 S3 Configuration Status:', {
       bucket: process.env.RECORDING_BUCKET ? '✅ Set' : '❌ MISSING',

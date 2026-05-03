@@ -266,9 +266,7 @@
 <a name='L201'></a><a href='#L201'>201</a>
 <a name='L202'></a><a href='#L202'>202</a>
 <a name='L203'></a><a href='#L203'>203</a>
-<a name='L204'></a><a href='#L204'>204</a>
-<a name='L205'></a><a href='#L205'>205</a>
-<a name='L206'></a><a href='#L206'>206</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L204'></a><a href='#L204'>204</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -418,7 +416,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -431,7 +428,6 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
-<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -474,11 +470,11 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const axios = require('axios');
-const { 
-  AGORA_APP_ID, 
-  createRecordingAuthHeader, 
-  validateRecordingCredentials, 
-  generateRtcToken 
+const {
+  AGORA_APP_ID,
+  createRecordingAuthHeader,
+  validateRecordingCredentials,
+  generateRtcToken,
 } = require('../config/agora');
 const { RtcRole } = require('agora-access-token');
 &nbsp;
@@ -494,7 +490,7 @@ const activeRecordings = new Map();
 async function <span class="fstat-no" title="function not covered" >initializeActiveRecordings(</span>) {
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const actives = <span class="cstat-no" title="statement not covered" >await ActiveRecording.find();</span>
-<span class="cstat-no" title="statement not covered" >    actives.forEach(<span class="fstat-no" title="function not covered" >a </span>=&gt; {</span>
+<span class="cstat-no" title="statement not covered" >    actives.forEach(<span class="fstat-no" title="function not covered" >(a</span>) =&gt; {</span>
 <span class="cstat-no" title="statement not covered" >      activeRecordings.set(a.channelName, {</span>
         resourceId: a.resourceId,
         sid: a.sid,
@@ -502,11 +498,11 @@ async function <span class="fstat-no" title="function not covered" >initializeAc
         userId: a.userId,
         username: a.username,
         mode: a.mode,
-        startedAt: a.startedAt
+        startedAt: a.startedAt,
       });
     });
 <span class="cstat-no" title="statement not covered" >    console.log(`✅ Loaded ${activeRecordings.size} active recording sessions from database`);</span>
-    
+&nbsp;
     // Cleanup stale recordings (older than 24h)
     const staleThreshold = <span class="cstat-no" title="statement not covered" >new Date(Date.now() - 24 * 60 * 60 * 1000);</span>
     const result = <span class="cstat-no" title="statement not covered" >await ActiveRecording.deleteMany({ startedAt: { $lt: staleThreshold } });</span>
@@ -604,7 +600,7 @@ async function <span class="fstat-no" title="function not covered" >startRecordi
 &nbsp;
 <span class="cstat-no" title="statement not covered" >      if (response.status === 200 &amp;&amp; response.data.sid) {</span>
 <span class="cstat-no" title="statement not covered" >        console.log(`✅ Recording started successfully. SessionId: ${response.data.sid}`);</span>
-        
+&nbsp;
         const recordingData = <span class="cstat-no" title="statement not covered" >{</span>
           resourceId,
           sid: response.data.sid,
@@ -616,13 +612,12 @@ async function <span class="fstat-no" title="function not covered" >startRecordi
         };
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        activeRecordings.set(channelName, recordingData);</span>
-        
+&nbsp;
         // Persist to DB
-<span class="cstat-no" title="statement not covered" >        await ActiveRecording.findOneAndUpdate(</span>
-          { channelName },
-          recordingData,
-          { upsert: true, new: true }
-        );
+<span class="cstat-no" title="statement not covered" >        await ActiveRecording.findOneAndUpdate({ channelName }, recordingData, {</span>
+          upsert: true,
+          new: true,
+        });
 &nbsp;
 <span class="cstat-no" title="statement not covered" >        return { resourceId, sid: response.data.sid };</span>
       }
@@ -638,7 +633,6 @@ async function <span class="fstat-no" title="function not covered" >startRecordi
 <span class="cstat-no" title="statement not covered" >    throw new Error(`Failed to start recording: ${error.message}`);</span>
   }
 }
-&nbsp;
 &nbsp;
 async function <span class="fstat-no" title="function not covered" >stopRecording(</span>channelName, resourceId, sid, mode = <span class="branch-0 cbranch-no" title="branch not covered" >'mix')</span> {
 <span class="cstat-no" title="statement not covered" >  try {</span>
@@ -685,7 +679,7 @@ module.exports = {
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-05-03T07:38:27.247Z
+                at 2026-05-03T07:54:47.161Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

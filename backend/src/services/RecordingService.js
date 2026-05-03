@@ -1,9 +1,9 @@
 const axios = require('axios');
-const { 
-  AGORA_APP_ID, 
-  createRecordingAuthHeader, 
-  validateRecordingCredentials, 
-  generateRtcToken 
+const {
+  AGORA_APP_ID,
+  createRecordingAuthHeader,
+  validateRecordingCredentials,
+  generateRtcToken,
 } = require('../config/agora');
 const { RtcRole } = require('agora-access-token');
 
@@ -19,7 +19,7 @@ const activeRecordings = new Map();
 async function initializeActiveRecordings() {
   try {
     const actives = await ActiveRecording.find();
-    actives.forEach(a => {
+    actives.forEach((a) => {
       activeRecordings.set(a.channelName, {
         resourceId: a.resourceId,
         sid: a.sid,
@@ -27,11 +27,11 @@ async function initializeActiveRecordings() {
         userId: a.userId,
         username: a.username,
         mode: a.mode,
-        startedAt: a.startedAt
+        startedAt: a.startedAt,
       });
     });
     console.log(`✅ Loaded ${activeRecordings.size} active recording sessions from database`);
-    
+
     // Cleanup stale recordings (older than 24h)
     const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const result = await ActiveRecording.deleteMany({ startedAt: { $lt: staleThreshold } });
@@ -129,7 +129,7 @@ async function startRecording(channelName, resourceId, userId, username) {
 
       if (response.status === 200 && response.data.sid) {
         console.log(`✅ Recording started successfully. SessionId: ${response.data.sid}`);
-        
+
         const recordingData = {
           resourceId,
           sid: response.data.sid,
@@ -141,13 +141,12 @@ async function startRecording(channelName, resourceId, userId, username) {
         };
 
         activeRecordings.set(channelName, recordingData);
-        
+
         // Persist to DB
-        await ActiveRecording.findOneAndUpdate(
-          { channelName },
-          recordingData,
-          { upsert: true, new: true }
-        );
+        await ActiveRecording.findOneAndUpdate({ channelName }, recordingData, {
+          upsert: true,
+          new: true,
+        });
 
         return { resourceId, sid: response.data.sid };
       }
@@ -163,7 +162,6 @@ async function startRecording(channelName, resourceId, userId, username) {
     throw new Error(`Failed to start recording: ${error.message}`);
   }
 }
-
 
 async function stopRecording(channelName, resourceId, sid, mode = 'mix') {
   try {

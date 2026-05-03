@@ -30,7 +30,7 @@ const regionMap = {
 console.log('📝 Environment Debug:', {
   RECORDING_REGION: process.env.RECORDING_REGION,
   AWS_REGION: process.env.AWS_REGION,
-  mapped: regionMap[process.env.RECORDING_REGION]
+  mapped: regionMap[process.env.RECORDING_REGION],
 });
 
 const config = {
@@ -47,10 +47,10 @@ const config = {
     appCertificate: process.env.AGORA_APP_CERTIFICATE,
     customerId: process.env.AGORA_CUSTOMER_ID,
     customerSecret: process.env.AGORA_CUSTOMER_SECRET,
-    tokenTtl: 3600
+    tokenTtl: 3600,
   },
 
-// S3 / Storage Config
+  // S3 / Storage Config
   storage: {
     vendor: Number(process.env.RECORDING_VENDOR || 2),
     region: Number(process.env.RECORDING_REGION || 16),
@@ -58,8 +58,12 @@ const config = {
     accessKey: process.env.RECORDING_ACCESS_KEY,
     secretKey: process.env.RECORDING_SECRET_KEY,
     // Prioritize explicit AWS_REGION from .env, then map from Agora region number, fallback to eu-north-1
-    awsRegion: (process.env.AWS_REGION || regionMap[String(process.env.RECORDING_REGION || '').trim()] || 'eu-north-1').trim()
-  }
+    awsRegion: (
+      process.env.AWS_REGION ||
+      regionMap[String(process.env.RECORDING_REGION || '').trim()] ||
+      'eu-north-1'
+    ).trim(),
+  },
 };
 
 console.log('✅ Config Loaded: Storage Region =', config.storage.awsRegion);

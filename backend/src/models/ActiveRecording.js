@@ -7,7 +7,7 @@ const ActiveRecordingSchema = new mongoose.Schema({
   userId: { type: Number },
   username: { type: String },
   mode: { type: String, default: 'mix' },
-  startedAt: { type: Date, default: Date.now }
+  startedAt: { type: Date, default: Date.now },
 });
 
 module.exports = mongoose.model('ActiveRecording', ActiveRecordingSchema);

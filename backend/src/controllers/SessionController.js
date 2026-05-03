@@ -4,8 +4,7 @@ const User = require('../models/User');
 const mongoose = require('mongoose');
 const { acquireRecording, startRecording, stopRecording } = require('../services/RecordingService');
 
-// activeSessions Map removed in favor of MongoDB persistence
-const SESSION_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+// State is now managed via Session model in MongoDB
 
 exports.addUserToSession = async (req, res, next) => {
   try {
@@ -21,31 +20,29 @@ exports.addUserToSession = async (req, res, next) => {
 
     // ✅ ENFORCEMENT: Only allow joining if session is active or if the joiner is the host
     const isHost = role === 'host';
-    
+
     if (isHost) {
       // If host joins, ensure the session is marked active and recording starts
       const result = await startSessionInternal(sessionId);
       session = result.session;
       console.log(`🎙️ Session ${sessionId} activated by Host join.`);
     } else if (!session || !session.isActive) {
-      return res.status(403).json({ 
-        error: 'Session not active', 
-        message: 'The admin has not joined the call yet.' 
+      return res.status(403).json({
+        error: 'Session not active',
+        message: 'The admin has not joined the call yet.',
       });
     }
 
     // Use findOneAndUpdate with upsert to manage session state in DB
     session = await Session.findOneAndUpdate(
       { sessionId },
-      { 
-        $addToSet: { 
-          users: { userId, username, role: role || 'user', isSpeaking: false } 
-        } 
+      {
+        $addToSet: {
+          users: { userId, username, role: role || 'user', isSpeaking: false },
+        },
       },
       { upsert: true, new: true }
     );
-
-
 
     // If host is joining, update hostUid
     if (role === 'host') {
@@ -61,13 +58,15 @@ exports.addUserToSession = async (req, res, next) => {
 
     const updatedSession = await Session.findOne({ sessionId });
 
-    res.status(200).json({ 
-      success: true, 
-      message: `User ${userId} added`, 
-      hostUid: updatedSession.hostUid 
+    res.status(200).json({
+      success: true,
+      message: `User ${userId} added`,
+      hostUid: updatedSession.hostUid,
     });
 
-    User.findOneAndUpdate({ username }, { lastKnownUid: userId }).catch(err => console.error(err));
+    User.findOneAndUpdate({ username }, { lastKnownUid: userId }).catch((err) =>
+      console.error(err)
+    );
   } catch (error) {
     next(error);
   }
@@ -76,14 +75,14 @@ exports.addUserToSession = async (req, res, next) => {
 exports.getSessionUsers = async (req, res) => {
   const { id: sessionId } = req.params;
   const session = await Session.findOne({ sessionId }).lean();
-  
+
   if (!session) return res.json({ sessionId, users: [], total: 0, hostUid: null });
 
-  res.json({ 
-    sessionId, 
-    users: session.users, 
-    total: session.users.length, 
-    hostUid: session.hostUid 
+  res.json({
+    sessionId,
+    users: session.users,
+    total: session.users.length,
+    hostUid: session.hostUid,
   });
 };
 
@@ -101,10 +100,16 @@ async function startSessionInternal(sessionId) {
   try {
     const resourceId = await acquireRecording(sessionId);
     const recordingData = await startRecording(sessionId, resourceId);
-    
+
     await Session.updateOne(
       { sessionId },
-      { $set: { recordingResourceId: resourceId, recordingSid: recordingData.sid, recordingActive: true } }
+      {
+        $set: {
+          recordingResourceId: resourceId,
+          recordingSid: recordingData.sid,
+          recordingActive: true,
+        },
+      }
     );
     recordingActive = true;
   } catch (err) {
@@ -118,17 +123,16 @@ exports.startSession = async (req, res, next) => {
     const { id: sessionId } = req.params;
     const { session, recordingActive } = await startSessionInternal(sessionId);
 
-    res.status(200).json({ 
-      success: true, 
-      sessionId, 
-      startedAt: session.startedAt, 
-      recordingActive 
+    res.status(200).json({
+      success: true,
+      sessionId,
+      startedAt: session.startedAt,
+      recordingActive,
     });
   } catch (error) {
     next(error);
   }
 };
-
 
 exports.stopSession = async (req, res, next) => {
   try {
@@ -159,11 +163,11 @@ exports.getSessionStatus = async (req, res) => {
   const { id: sessionId } = req.params;
   const session = await Session.findOne({ sessionId }).lean();
   if (!session) return res.json({ sessionId, isActive: false, users: 0 });
-  res.json({ 
-    sessionId, 
-    isActive: session.isActive, 
-    startedAt: session.startedAt, 
-    users: session.users.length 
+  res.json({
+    sessionId,
+    isActive: session.isActive,
+    startedAt: session.startedAt,
+    users: session.users.length,
   });
 };
 

@@ -17,8 +17,7 @@ function ensureMongoForAuth(res) {
   if (!isConnected) {
     res.status(503).json({
       error: 'MongoDB not connected',
-      message:
-        'MongoDB is configured but not reachable. Start MongoDB and restart the server.',
+      message: 'MongoDB is configured but not reachable. Start MongoDB and restart the server.',
     });
     return false;
   }

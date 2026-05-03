@@ -6,7 +6,7 @@ const authMiddleware = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     let token = '';
-    
+
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.slice(7);
     } else if (req.query && req.query.token) {
