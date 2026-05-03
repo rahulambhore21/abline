@@ -48,5 +48,4 @@ describe('Auth Integration Tests', () => {
       expect(res.body.details[0]).toHaveProperty('field', 'password');
     });
   });
-
 });
