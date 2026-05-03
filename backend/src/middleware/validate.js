@@ -7,7 +7,7 @@ const logger = require('../utils/logger');
  */
 const validate = (schema, property = 'body') => {
   return (req, res, next) => {
-    const { error } = schema.validate(req[property], { 
+    const { error } = schema.validate(req[property], {
       abortEarly: false,
       stripUnknown: true, // Remove fields not defined in schema
     });
@@ -17,12 +17,12 @@ const validate = (schema, property = 'body') => {
         field: detail.path.join('.'),
         message: detail.message.replace(/['"]/g, ''),
       }));
-      
-      logger.warn('Validation Failure', { 
-        path: req.path, 
+
+      logger.warn('Validation Failure', {
+        path: req.path,
         method: req.method,
-        errors, 
-        userId: req.user?.userId 
+        errors,
+        userId: req.user?.userId,
       });
 
       return res.status(400).json({

@@ -56,4 +56,3 @@ router.get(
 router.get('/download/:recordingId', authMiddleware, recordingController.downloadRecording);
 
 module.exports = router;
-

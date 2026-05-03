@@ -5,7 +5,11 @@ const { authMiddleware, allowRole } = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const schemas = require('../utils/schemas');
 
-router.post('/:id/users/add', validate(schemas.session.addUser), sessionController.addUserToSession);
+router.post(
+  '/:id/users/add',
+  validate(schemas.session.addUser),
+  sessionController.addUserToSession
+);
 router.get('/:id/users', sessionController.getSessionUsers);
 router.post(
   '/:id/start',
@@ -37,10 +41,8 @@ router.post(
   sessionController.recordSpeakingEvent
 );
 
-
 router.get('/events/speaking', authMiddleware, sessionController.listSpeakingEvents);
 
 router.get('/health', sessionController.healthCheck);
 
 module.exports = router;
-

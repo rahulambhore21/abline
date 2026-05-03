@@ -182,7 +182,6 @@ exports.listRecordings = async (req, res, next) => {
   }
 };
 
-
 const crypto = require('crypto');
 
 exports.saveRecording = async (req, res, next) => {

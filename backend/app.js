@@ -61,7 +61,9 @@ if (
 app.use(cors(corsOptions));
 
 app.use(compression());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', { stream: logger.stream }));
+app.use(
+  morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', { stream: logger.stream })
+);
 app.use(express.json());
 app.use(fileUpload());
 
@@ -77,7 +79,7 @@ app.get('/health', async (req, res) => {
     },
     config: {
       node_env: process.env.NODE_ENV,
-    }
+    },
   };
 
   try {

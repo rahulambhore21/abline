@@ -72,8 +72,7 @@ const schemas = {
       type: Joi.string().valid('start', 'stop').required(),
       timestamp: Joi.date().iso().required(),
     }),
-  }
+  },
 };
-
 
 module.exports = schemas;
