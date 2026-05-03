@@ -23,16 +23,16 @@
         <div class='clearfix'>
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">21.42% </span>
+                <span class="strong">20.68% </span>
                 <span class="quiet">Statements</span>
-                <span class='fraction'>6/28</span>
+                <span class='fraction'>6/29</span>
             </div>
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">5% </span>
+                <span class="strong">0% </span>
                 <span class="quiet">Branches</span>
-                <span class='fraction'>1/20</span>
+                <span class='fraction'>0/16</span>
             </div>
         
             
@@ -44,9 +44,9 @@
         
             
             <div class='fl pad1y space-right2'>
-                <span class="strong">21.42% </span>
+                <span class="strong">20.68% </span>
                 <span class="quiet">Lines</span>
-                <span class='fraction'>6/28</span>
+                <span class='fraction'>6/29</span>
             </div>
         
             
@@ -138,7 +138,13 @@
 <a name='L73'></a><a href='#L73'>73</a>
 <a name='L74'></a><a href='#L74'>74</a>
 <a name='L75'></a><a href='#L75'>75</a>
-<a name='L76'></a><a href='#L76'>76</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a></td><td class="line-coverage quiet"><span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -147,8 +153,14 @@
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -192,7 +204,7 @@
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
 <span class="cline-any cline-yes">1x</span>
-<span class="cline-any cline-yes">10x</span>
+<span class="cline-any cline-yes">9x</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-no">&nbsp;</span>
 <span class="cline-any cline-neutral">&nbsp;</span>
@@ -215,23 +227,29 @@
 <span class="cline-any cline-yes">1x</span>
 <span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">const jwt = require('jsonwebtoken');
 &nbsp;
-const JWT_SECRET = process.env.JWT_SECRET || <span class="branch-1 cbranch-no" title="branch not covered" >'your-super-secret-key-change-in-production';</span>
+const JWT_SECRET = process.env.JWT_SECRET;
 &nbsp;
 const authMiddleware = <span class="fstat-no" title="function not covered" >(r</span>eq, res, next) =&gt; {
+<span class="cstat-no" title="statement not covered" >  if (!JWT_SECRET) {</span>
+<span class="cstat-no" title="statement not covered" >    console.error('FATAL: JWT_SECRET environment variable is not set.');</span>
+<span class="cstat-no" title="statement not covered" >    return res.status(500).json({</span>
+      error: 'Configuration Error',
+      message: 'Server is missing critical security configuration.',
+    });
+  }
+&nbsp;
 <span class="cstat-no" title="statement not covered" >  try {</span>
     const authHeader = <span class="cstat-no" title="statement not covered" >req.headers.authorization;</span>
     let token = <span class="cstat-no" title="statement not covered" >'';</span>
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (authHeader &amp;&amp; authHeader.startsWith('Bearer ')) {</span>
 <span class="cstat-no" title="statement not covered" >      token = authHeader.slice(7);</span>
-    } else <span class="cstat-no" title="statement not covered" >if (req.query &amp;&amp; req.query.token) {</span>
-<span class="cstat-no" title="statement not covered" >      token = req.query.token;</span>
     }
 &nbsp;
 <span class="cstat-no" title="statement not covered" >    if (!token) {</span>
 <span class="cstat-no" title="statement not covered" >      return res.status(401).json({</span>
         error: 'Missing or invalid authentication',
-        message: 'Provide token via Authorization header or "token" query parameter',
+        message: 'Provide token via Authorization: Bearer &lt;token&gt; header',
       });
     }
 &nbsp;
@@ -295,7 +313,7 @@ module.exports = { authMiddleware, allowRole };
             <div class='footer quiet pad2 space-top1 center small'>
                 Code coverage generated by
                 <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
-                at 2026-05-03T07:54:47.161Z
+                at 2026-05-03T13:04:48.035Z
             </div>
         <script src="../../../prettify.js"></script>
         <script>

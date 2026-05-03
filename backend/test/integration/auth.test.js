@@ -44,7 +44,9 @@ describe('Auth Integration Tests', () => {
       const res = await request(app).post('/auth/login').send({ username: 'test' });
 
       expect(res.statusCode).toEqual(400);
-      expect(res.body).toHaveProperty('error', 'Missing required fields: username, password');
+      expect(res.body).toHaveProperty('error', 'Validation Error');
+      expect(res.body.details[0]).toHaveProperty('field', 'password');
     });
   });
+
 });
