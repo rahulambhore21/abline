@@ -4,6 +4,10 @@ const { deleteFromS3 } = require('./S3Service');
 /**
  * Deletes recordings older than 7 days from S3 and MongoDB
  */
+/**
+ * Deletes recordings older than 7 days from S3 and MongoDB
+ * SCALE-SAFE: Uses cursors to avoid loading all documents into memory
+ */
 async function cleanupOldRecordings() {
   try {
     const sevenDaysAgo = new Date();
@@ -11,21 +15,15 @@ async function cleanupOldRecordings() {
 
     console.log(`🧹 Starting cleanup for recordings older than: ${sevenDaysAgo.toISOString()}`);
 
-    const oldRecordings = await Recording.find({
+    // Use .cursor() to stream documents one by one (Memory Efficient)
+    const cursor = Recording.find({
       recordedAt: { $lt: sevenDaysAgo },
-    });
-
-    if (oldRecordings.length === 0) {
-      console.log('✅ No old recordings found for cleanup.');
-      return;
-    }
-
-    console.log(`🗑️ Found ${oldRecordings.length} recordings to delete.`);
+    }).cursor();
 
     let successCount = 0;
     let errorCount = 0;
 
-    for (const recording of oldRecordings) {
+    for (let recording = await cursor.next(); recording != null; recording = await cursor.next()) {
       try {
         // Delete from S3
         if (recording.filename) {
@@ -36,7 +34,9 @@ async function cleanupOldRecordings() {
         await Recording.deleteOne({ _id: recording._id });
 
         successCount++;
-        console.log(`   ✅ Deleted recording: ${recording.recordingId}`);
+        if (successCount % 50 === 0) {
+          console.log(`   ... processed ${successCount} deletions`);
+        }
       } catch (err) {
         errorCount++;
         console.error(`   ❌ Failed to delete recording ${recording.recordingId}: ${err.message}`);
@@ -50,17 +50,19 @@ async function cleanupOldRecordings() {
 }
 
 /**
- * Initializes the daily cleanup task
+ * Initializes the cleanup task to run at a predictable off-peak time (3 AM)
  */
 function initCleanupTask() {
-  // Run once on startup
-  cleanupOldRecordings();
+  // Check every minute if it's 3:00 AM
+  setInterval(() => {
+    const now = new Date();
+    if (now.getHours() === 3 && now.getMinutes() === 0) {
+      cleanupOldRecordings();
+    }
+  }, 60 * 1000);
 
-  // Schedule to run every 24 hours
-  const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-  setInterval(cleanupOldRecordings, TWENTY_FOUR_HOURS);
-
-  console.log('⏰ Recordings cleanup task scheduled to run every 24 hours.');
+  // Also run once on startup for safety (optional, but good for visibility)
+  console.log('⏰ Recordings cleanup task scheduled for 3:00 AM daily.');
 }
 
 module.exports = {

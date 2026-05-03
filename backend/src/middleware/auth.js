@@ -1,22 +1,28 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
 
 const authMiddleware = (req, res, next) => {
+  if (!JWT_SECRET) {
+    console.error('FATAL: JWT_SECRET environment variable is not set.');
+    return res.status(500).json({
+      error: 'Configuration Error',
+      message: 'Server is missing critical security configuration.',
+    });
+  }
+
   try {
     const authHeader = req.headers.authorization;
     let token = '';
 
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.slice(7);
-    } else if (req.query && req.query.token) {
-      token = req.query.token;
     }
 
     if (!token) {
       return res.status(401).json({
         error: 'Missing or invalid authentication',
-        message: 'Provide token via Authorization header or "token" query parameter',
+        message: 'Provide token via Authorization: Bearer <token> header',
       });
     }
 

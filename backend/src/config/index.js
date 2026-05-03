@@ -27,17 +27,13 @@ const regionMap = {
   21: 'eu-north-1',
 };
 
-console.log('📝 Environment Debug:', {
-  RECORDING_REGION: process.env.RECORDING_REGION,
-  AWS_REGION: process.env.AWS_REGION,
-  mapped: regionMap[process.env.RECORDING_REGION],
-});
+
 
 const config = {
   // Server Config
   port: process.env.PORT || 5000,
   publicUrl: process.env.PUBLIC_URL || 'https://v0c4kk0o0w440k4sk8cwwgs4.admarktech.cloud',
-  jwtSecret: process.env.JWT_SECRET || 'your-super-secret-jwt-key',
+  jwtSecret: process.env.JWT_SECRET,
   jwtExpiry: process.env.JWT_EXPIRY || '1d',
   mongodbUri: process.env.MONGODB_URI,
 

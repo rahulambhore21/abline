@@ -10,4 +10,7 @@ router.get('/users', authMiddleware, allowRole('host'), authController.listUsers
 router.delete('/users/:id', authMiddleware, allowRole('host'), authController.deleteUser);
 router.get('/host', authController.getHost);
 
+// SECURITY: Backend PIN verification for destructive actions
+router.post('/verify-pin', authMiddleware, allowRole('host'), authController.verifyAdminPin);
+
 module.exports = router;

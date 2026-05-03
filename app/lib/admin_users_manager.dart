@@ -451,11 +451,37 @@ class _DeleteConfirmDialog extends StatefulWidget {
 
 class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
   final _pinController = TextEditingController();
+  bool _isVerifying = false;
 
   @override
   void dispose() {
     _pinController.dispose();
     super.dispose();
+  }
+
+  Future<void> _verifyAndProceed() async {
+    if (_pinController.text.isEmpty) return;
+
+    setState(() => _isVerifying = true);
+
+    try {
+      final authService = AuthService(backendUrl: AppConfig.backendBaseUrl);
+      final response = await authService.authenticatedPost(
+        '${AppConfig.backendBaseUrl}/auth/verify-pin',
+        body: {'pin': _pinController.text},
+      );
+
+      if (response.statusCode == 200) {
+        if (mounted) Navigator.pop(context, true);
+      } else {
+        final error = jsonDecode(response.body);
+        widget.onSnackBar(error['message'] ?? '❌ Invalid PIN', true);
+      }
+    } catch (e) {
+      widget.onSnackBar('❌ Verification error: $e', true);
+    } finally {
+      if (mounted) setState(() => _isVerifying = false);
+    }
   }
 
   @override
@@ -483,6 +509,7 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
             keyboardType: TextInputType.number,
             obscureText: true,
             autofocus: true,
+            onSubmitted: (_) => _verifyAndProceed(),
           ),
         ],
       ),
@@ -492,18 +519,14 @@ class _DeleteConfirmDialogState extends State<_DeleteConfirmDialog> {
           child: const Text('Cancel'),
         ),
         ElevatedButton(
-          onPressed: () {
-            if (_pinController.text == AppConfig.adminDeletePin) {
-              Navigator.pop(context, true);
-            } else {
-              widget.onSnackBar('❌ Incorrect PIN. Action denied.', true);
-            }
-          },
+          onPressed: _isVerifying ? null : _verifyAndProceed,
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.red,
             foregroundColor: Colors.white,
           ),
-          child: const Text('Delete User'),
+          child: _isVerifying
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+              : const Text('Delete User'),
         ),
       ],
     );

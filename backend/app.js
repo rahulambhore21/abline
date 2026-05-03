@@ -22,11 +22,42 @@ const recordingController = require('./src/controllers/RecordingController');
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// --- ENVIRONMENT VALIDATION ---
+const requiredEnv = [
+  'JWT_SECRET',
+  'AGORA_APP_ID',
+  'AGORA_APP_CERTIFICATE',
+  'MONGODB_URI',
+  'ADMIN_DELETE_PIN',
+];
+const missingEnv = requiredEnv.filter((env) => !process.env[env]);
+
+if (missingEnv.length > 0) {
+  console.error(`❌ FATAL: Missing required environment variables: ${missingEnv.join(', ')}`);
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  } else {
+    console.warn('⚠️ Server will likely fail in production mode.');
+  }
+}
+
 // Middleware
 app.use(helmet());
-app.use(cors());
+
+// --- RESTRICTED CORS ---
+const corsOptions = {
+  origin: process.env.ALLOWED_ORIGINS ? process.env.ALLOWED_ORIGINS.split(',') : '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+};
+
+if (process.env.NODE_ENV === 'production' && (!process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS === '*')) {
+  console.warn('⚠️ SECURITY WARNING: CORS is wide open in production. Set ALLOWED_ORIGINS.');
+}
+app.use(cors(corsOptions));
+
 app.use(compression());
-app.use(morgan('dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.use(express.json());
 app.use(fileUpload());
 
@@ -35,21 +66,11 @@ app.use('/auth', authRoutes);
 app.use('/recording', recordingRoutes);
 app.use('/session', sessionRoutes);
 
-// --- AGORA ROUTES ---
-app.get('/agora/token', agoraController.getToken);
+// --- AGORA ROUTES (Now Secured) ---
+app.get('/agora/token', authMiddleware, agoraController.getToken);
 
-// --- LEGACY COMPATIBILITY ROUTES (Root level paths used by older frontend) ---
-// Session/Speaking events
-app.use('/', sessionRoutes);
-
-// Auth compatibility (Secure them same as modular routes)
-app.get('/users', authMiddleware, allowRole('host'), authController.listUsers);
-app.get('/host', authController.getHost);
-
-// Recording compatibility
-app.use('/recordings', recordingRoutes);
-app.post('/start-recording', authMiddleware, allowRole('host'), recordingController.startRecording);
-app.post('/stop-recording', authMiddleware, allowRole('host'), recordingController.stopRecording);
+// --- LEGACY COMPATIBILITY ROUTES REMOVED FOR SECURITY ---
+// (Previously unprotected root-level paths)
 // -----------------------------------------------------------------
 
 // Global Error Handler

@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  /// ✅ Check if session is active (host has started the call)
+  /// ✅ Check if session is active and joinable (host is online)
   Future<void> _checkSessionStatus() async {
     try {
       final response = await http
@@ -63,21 +63,62 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final isActive = (data['isActive'] ?? false) as bool;
+        // Authoritative flag from backend
+        final isJoinable = (data['isJoinable'] ?? false) as bool;
 
         if (mounted) {
           setState(() {
-            _isHostOnline = isActive;
+            _isHostOnline = isJoinable;
           });
         }
       }
     } catch (e) {
       debugPrint('Error checking session status: $e');
-      // Keep offline status on error
       if (mounted) {
         setState(() {
           _isHostOnline = false;
         });
+      }
+    }
+  }
+
+  /// ✅ Final validation before joining to prevent race conditions
+  Future<void> _handleJoinPress() async {
+    // 1. Show a quick loading state
+    setState(() => _isHostOnline = false); 
+    
+    try {
+      // 2. Re-verify with backend
+      final response = await http
+          .get(Uri.parse('${AppConfig.backendBaseUrl}/session/test_room/status'))
+          .timeout(const Duration(seconds: 3));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final isJoinable = (data['isJoinable'] ?? false) as bool;
+
+        if (isJoinable) {
+          if (!mounted) return;
+          unawaited(Navigator.push(
+            context,
+            MaterialPageRoute<void>(
+              builder: (context) => const VoiceCallScreen(),
+            ),
+          ));
+        } else {
+          if (mounted) {
+            setState(() => _isHostOnline = false);
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Host just went offline. Cannot join.')),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Connection error: $e')),
+        );
       }
     }
   }
@@ -323,16 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: double.infinity,
                         height: 50,
                         child: ElevatedButton(
-                          onPressed: _isHostOnline
-                              ? () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute<void>(
-                                      builder: (context) => const VoiceCallScreen(),
-                                    ),
-                                  );
-                                }
-                              : null, // ✅ Disabled when host is offline
+                          onPressed: _isHostOnline ? _handleJoinPress : null, // ✅ Disabled when host is offline
                           style: ElevatedButton.styleFrom(
                             backgroundColor: _isHostOnline ? Colors.blue : Colors.grey, // ✅ Grey when disabled
                             foregroundColor: Colors.white,

@@ -249,12 +249,31 @@ class VoiceCallController extends ChangeNotifier {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        
+        // 1. Session Activity
         final wasActive = isSessionActive;
         final active = (data['isActive'] ?? false) as bool;
         isSessionActive = active;
+        
+        // 2. Consolidated Recording Status
+        isRecording = (data['isRecording'] ?? false) as bool;
+        
+        // 3. Consolidated Participant List
+        final participants = (data['participants'] as List?) ?? [];
+        for (final p in participants) {
+          if (p is Map) {
+            final uidVal = p['userId'];
+            final name = p['username'] as String?;
+            if (uidVal != null && name != null) {
+              usernames[uidVal is int ? uidVal : int.parse(uidVal.toString())] = name;
+            }
+          }
+        }
+
         statusMessage = active
-            ? 'Session active - Ready to join'
+            ? (isRecording ? 'Session active • Recording' : 'Session active • Joining')
             : 'Waiting for host to start session...';
+        
         notifyListeners();
 
         if (!wasActive && active && !isConnected && !isJoining) {
@@ -262,11 +281,12 @@ class VoiceCallController extends ChangeNotifier {
         }
         if (wasActive && !active && isConnected) {
           debugPrint('🚪 Host ended call. Disconnecting...');
-          unawaited(leaveChannel()); // ✅ NEW: Force leave locally
+          unawaited(leaveChannel());
           unawaited(onHostLeft?.call());
         }
       }
-    } catch (_) {
+    } catch (e) {
+      debugPrint('Sync Error: $e');
       presenceStatus = PresenceStatus.reconnecting;
       notifyListeners();
     } finally {
@@ -388,8 +408,16 @@ class VoiceCallController extends ChangeNotifier {
 
     final url =
         Uri.parse('$backendUrl/agora/token?channelName=$channelName&uid=$uid');
-    final response =
-        await http.get(url).timeout(const Duration(seconds: 10));
+    
+    final jwtToken = await authService.getToken();
+    
+    final response = await http.get(
+      url,
+      headers: {
+        'Content-Type': 'application/json',
+        if (jwtToken != null) 'Authorization': 'Bearer $jwtToken',
+      },
+    ).timeout(const Duration(seconds: 10));
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
@@ -397,8 +425,10 @@ class VoiceCallController extends ChangeNotifier {
       tokenFetchedAt = DateTime.now();
       statusMessage = 'Token obtained';
       notifyListeners();
+    } else if (response.statusCode == 401) {
+      throw Exception('Authentication expired. Please login again.');
     } else {
-      throw Exception('Failed to get token');
+      throw Exception('Failed to get token: ${response.statusCode}');
     }
   }
 
@@ -627,13 +657,7 @@ class VoiceCallController extends ChangeNotifier {
   // ─── Username fetching ────────────────────────────────────────────────────
 
   void _startFetchingUsernames() {
-    _fetchUsernames();
-    _usernamesFetchTimer = Timer.periodic(
-      const Duration(seconds: _usernameFetchInterval),
-      (_) {
-        if (isConnected) _fetchUsernames();
-      },
-    );
+    // Redundant - Now handled by _checkSessionStatus consolidated sync
   }
 
   Future<void> _fetchUsernames() async {
@@ -674,10 +698,7 @@ class VoiceCallController extends ChangeNotifier {
   // ─── Recording status ─────────────────────────────────────────────────────
 
   void _startRecordingStatusPolling() {
-    _recordingStatusTimer?.cancel();
-    _checkRecordingStatus();
-    _recordingStatusTimer =
-        Timer.periodic(const Duration(seconds: 3), (_) => _checkRecordingStatus());
+    // Redundant - Now handled by _checkSessionStatus consolidated sync
   }
 
   void _stopRecordingStatusPolling() {
@@ -780,18 +801,24 @@ class VoiceCallController extends ChangeNotifier {
       
       final uploadUrl = jsonDecode(responseUrl.body)['uploadUrl'] as String;
 
-      // 2. ✅ Upload DIRECTLY to S3
-      final fileBytes = await audioFile.readAsBytes();
-      final uploadResponse = await http.put(
-        Uri.parse(uploadUrl),
-        headers: {
-          'Content-Type': 'audio/mp4',
-        },
-        body: fileBytes,
-      ).timeout(const Duration(seconds: 60));
+      // 2. ✅ Streaming Upload DIRECTLY to S3 (Scale-Safe: Zero-RAM buffering)
+      final request = http.StreamedRequest('PUT', Uri.parse(uploadUrl));
+      request.headers['Content-Type'] = 'audio/mp4';
+      final length = await audioFile.length();
+      request.contentLength = length;
 
-      if (uploadResponse.statusCode != 200) {
-        throw Exception('S3 Direct Upload failed: ${uploadResponse.statusCode}');
+      // Stream the file from disk to the network
+      audioFile.openRead().listen(
+        request.sink.add,
+        onDone: request.sink.close,
+        onError: request.sink.addError,
+      );
+
+      final uploadStreamedResponse = await request.send().timeout(const Duration(seconds: 120));
+      final uploadStatusCode = uploadStreamedResponse.statusCode;
+
+      if (uploadStatusCode != 200) {
+        throw Exception('S3 Direct Upload failed: $uploadStatusCode');
       }
 
       // 3. ✅ Notify backend to save the record
@@ -848,14 +875,50 @@ class VoiceCallController extends ChangeNotifier {
     audioRecorder.dispose();
     speakerTracker.dispose();
     WakelockPlus.disable(); // Ensure wakelock is off
-    _leaveChannelAndDestroy();
+    leaveChannel();
     super.dispose();
+  }
+
+  Future<void> leaveChannel() async {
+    try {
+      if (isHost) {
+        await _notifyHostOffline();
+      }
+      await _leaveChannelAndDestroy();
+    } catch (e) {
+      debugPrint('Error leaving channel: $e');
+    }
+  }
+
+  Future<void> _notifyHostOffline() async {
+    try {
+      final token = await authService.getToken();
+      await http.post(
+        Uri.parse('$backendUrl/session/$channelName/host/offline'),
+        headers: {
+          if (token != null) 'Authorization': 'Bearer $token',
+        },
+      ).timeout(const Duration(seconds: 5));
+    } catch (e) {
+      debugPrint('Error notifying host offline: $e');
+    }
   }
 
   Future<void> _leaveChannelAndDestroy() async {
     try {
-      if (isConnected) await agoraEngine.leaveChannel();
+      _stopSessionStatusPolling();
+      _stopRecordingStatusPolling();
+      _usernamesFetchTimer?.cancel();
+      _heartbeatTimer?.cancel();
+
+      if (isConnected) {
+        await agoraEngine.leaveChannel();
+        isConnected = false;
+      }
       await agoraEngine.release();
-    } catch (_) {}
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error in _leaveChannelAndDestroy: $e');
+    }
   }
 }

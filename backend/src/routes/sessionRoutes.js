@@ -8,7 +8,8 @@ router.get('/:id/users', sessionController.getSessionUsers);
 router.post('/:id/start', authMiddleware, allowRole('host'), sessionController.startSession);
 router.post('/:id/stop', authMiddleware, allowRole('host'), sessionController.stopSession);
 router.get('/:id/status', sessionController.getSessionStatus);
-router.post('/:id/heartbeat', authMiddleware, allowRole('host'), sessionController.sendHeartbeat);
+router.post('/:id/heartbeat', authMiddleware, sessionController.sendHeartbeat);
+router.post('/:id/host/offline', authMiddleware, allowRole('host'), sessionController.setHostOffline);
 
 router.post('/events/speaking', authMiddleware, sessionController.recordSpeakingEvent);
 router.get('/events/speaking', authMiddleware, sessionController.listSpeakingEvents);

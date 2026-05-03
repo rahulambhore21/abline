@@ -174,32 +174,44 @@ exports.listRecordings = async (req, res, next) => {
   }
 };
 
+const crypto = require('crypto');
+
 exports.saveRecording = async (req, res, next) => {
   try {
     const { userId, sessionId, durationMs, username, url, filename: providedFilename } = req.body;
     const audioFile = req.files?.audioFile;
 
-    if (!userId || !sessionId)
-      return res.status(400).json({ error: 'Missing userId or sessionId' });
+    if (!sessionId) return res.status(400).json({ error: 'Missing sessionId' });
+
+    // SECURITY: Use authenticated identity as source of truth
+    const authenticatedUserId = req.user.userId;
+    const authenticatedUsername = req.user.username;
+
+    // Reject spoofed userId
+    if (userId !== undefined && String(userId) !== String(authenticatedUserId)) {
+      console.warn(`🔐 Security Alert: User ${authenticatedUsername} tried to save recording for userId ${userId}`);
+      return res.status(403).json({ error: 'Forbidden', message: 'You can only save recordings for yourself.' });
+    }
 
     let finalUrl = url;
     let recordingId = `rec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    let filename = providedFilename || `${recordingId}.m4a`;
+    
+    // SECURITY: Sanitize filename to prevent directory traversal or malicious characters
+    let sanitizedFilename = (providedFilename || `${recordingId}.m4a`)
+        .replace(/[^a-zA-Z0-9.\-_]/g, ''); // Only allow alphanumeric, dots, dashes, underscores
 
     if (audioFile) {
-      // Legacy path: File sent to backend
-      finalUrl = await uploadToS3(audioFile.data, filename, audioFile.mimetype);
-      console.log(`✅ Recording persisted to S3 via backend: ${finalUrl}`);
+      finalUrl = await uploadToS3(audioFile.data, sanitizedFilename, audioFile.mimetype);
     } else if (!url) {
       return res.status(400).json({ error: 'Missing audioFile or direct S3 url' });
     }
 
     const recordingData = {
       recordingId,
-      userId: Number(userId),
-      username: username || 'Unknown',
+      userId: Number(authenticatedUserId),
+      username: authenticatedUsername,
       sessionId,
-      filename,
+      filename: sanitizedFilename,
       url: finalUrl,
       recordedAt: new Date(),
       durationMs: Number(durationMs) || 0,
@@ -219,8 +231,12 @@ exports.requestUploadUrl = async (req, res, next) => {
     const { filename, contentType } = req.body;
     if (!filename) return res.status(400).json({ error: 'Missing filename' });
 
-    const uploadUrl = await getPresignedUrl(filename, contentType);
-    res.json({ uploadUrl });
+    // SECURITY: Sanitize filename to prevent S3 path injection or manipulation
+    const sanitizedFilename = filename.split('/').pop().replace(/[^a-zA-Z0-9.\-_]/g, '');
+    const finalFilename = `user_${req.user.userId}/${Date.now()}_${sanitizedFilename}`;
+
+    const uploadUrl = await getPresignedUrl(finalFilename, contentType);
+    res.json({ uploadUrl, filename: finalFilename });
   } catch (error) {
     next(error);
   }
@@ -286,6 +302,25 @@ exports.activeRecordings = (req, res) => {
 
 exports.webhook = async (req, res) => {
   try {
+    // SECURITY: Verify Agora Webhook Signature
+    const signature = req.headers['agora-signature'];
+    const secret = process.env.AGORA_WEBHOOK_SECRET;
+
+    if (secret && signature) {
+      // For Agora, the signature is typically a hash of the body
+      const computeSignature = crypto
+        .createHmac('sha256', secret)
+        .update(JSON.stringify(req.body))
+        .digest('hex');
+
+      if (computeSignature !== signature) {
+        console.warn('🔐 Security Alert: Invalid Agora Webhook Signature received');
+        return res.status(401).json({ status: 'unauthorized', message: 'Invalid signature' });
+      }
+    } else if (process.env.NODE_ENV === 'production' && !secret) {
+      console.warn('🛑 SECURITY WARNING: AGORA_WEBHOOK_SECRET not set in production. Webhooks are vulnerable to spoofing.');
+    }
+
     const { sid, cname, fileList } = req.body;
     console.log(`🔔 Agora Webhook received for session: ${cname}, SID: ${sid}`);
 

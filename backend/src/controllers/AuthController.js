@@ -2,7 +2,7 @@ const User = require('../models/User');
 const jwt = require('jsonwebtoken');
 const { ensureMongoForAuth } = require('../utils/dbHelpers');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-production';
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRY = process.env.JWT_EXPIRY || '1d';
 
 exports.registerHost = async (req, res, next) => {
@@ -73,6 +73,11 @@ exports.login = async (req, res, next) => {
   try {
     if (!ensureMongoForAuth(res)) return;
 
+    if (!JWT_SECRET) {
+      console.error('FATAL: JWT_SECRET environment variable is not set.');
+      return res.status(500).json({ error: 'Configuration Error' });
+    }
+
     const { username, password } = req.body;
 
     if (!username || !password) {
@@ -81,10 +86,11 @@ exports.login = async (req, res, next) => {
 
     const user = await User.findOne({ username }).select('+password');
 
+    // SECURITY: Use generic error message to prevent username enumeration
     if (!user) {
       return res.status(401).json({
         error: 'Invalid credentials',
-        message: 'Username not found',
+        message: 'Invalid username or password',
       });
     }
 
@@ -93,7 +99,7 @@ exports.login = async (req, res, next) => {
     if (!isPasswordValid) {
       return res.status(401).json({
         error: 'Invalid credentials',
-        message: 'Incorrect password',
+        message: 'Invalid username or password',
       });
     }
 
@@ -175,5 +181,35 @@ exports.getHost = async (req, res, next) => {
     res.json({ username: host ? host.username : null });
   } catch (error) {
     next(error);
+  }
+};
+
+/**
+ * Verifies the administrative PIN for destructive actions
+ */
+exports.verifyAdminPin = async (req, res) => {
+  try {
+    const { pin } = req.body;
+    
+    // In production, this should be fetched from environment variables.
+    // If not set, we use a default but log a severe warning.
+    const systemPin = process.env.ADMIN_DELETE_PIN;
+    
+    if (!systemPin) {
+      console.error('🛑 SECURITY WARNING: ADMIN_DELETE_PIN not set in environment.');
+      return res.status(500).json({ 
+        error: 'Configuration Error', 
+        message: 'Administrative actions are currently disabled for security reasons.' 
+      });
+    }
+
+    if (String(pin) === String(systemPin)) {
+      return res.json({ success: true, message: 'PIN verified' });
+    } else {
+      console.warn(`🔐 Failed PIN attempt by ${req.user.username}`);
+      return res.status(401).json({ success: false, message: 'Invalid administrative PIN' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Verification failed', message: error.message });
   }
 };

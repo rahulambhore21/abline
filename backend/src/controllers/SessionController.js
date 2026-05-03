@@ -111,6 +111,7 @@ async function startSessionInternal(sessionId) {
         isActive: true,
         startedAt: session?.startedAt || new Date(),
         lastHeartbeat: new Date(),
+        hostLastHeartbeat: new Date(),
       },
     },
     { upsert: true, new: true }
@@ -200,9 +201,16 @@ exports.sendHeartbeat = async (req, res, next) => {
     const { id: sessionId } = req.params;
     const now = new Date();
 
+    const update = { $set: { lastHeartbeat: now } };
+    
+    // SECURITY: Only the authenticated host can update the host presence flag
+    if (req.user && req.user.role === 'host') {
+      update.$set.hostLastHeartbeat = now;
+    }
+
     const session = await Session.findOneAndUpdate(
       { sessionId, isActive: true },
-      { $set: { lastHeartbeat: now } },
+      update,
       { new: true }
     );
 
@@ -210,7 +218,31 @@ exports.sendHeartbeat = async (req, res, next) => {
       return res.status(404).json({ error: 'Active session not found' });
     }
 
-    res.status(200).json({ success: true, lastHeartbeat: now });
+    res.status(200).json({ 
+      success: true, 
+      lastHeartbeat: now,
+      isHost: req.user.role === 'host'
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+/**
+ * Explicitly marks the host as offline (e.g. on graceful exit)
+ */
+exports.setHostOffline = async (req, res, next) => {
+  try {
+    const { id: sessionId } = req.params;
+    
+    // Set hostLastHeartbeat to a very old date to trigger immediate "Offline" status
+    await Session.updateOne(
+      { sessionId },
+      { $set: { hostLastHeartbeat: new Date(0) } }
+    );
+
+    console.log(`👤 Host ${req.user.username} manually marked offline for ${sessionId}`);
+    res.status(200).json({ success: true, message: 'Host marked offline' });
   } catch (error) {
     next(error);
   }
@@ -220,7 +252,7 @@ exports.getSessionStatus = async (req, res) => {
   const { id: sessionId } = req.params;
   let session = await Session.findOne({ sessionId }).lean();
 
-  if (!session) return res.json({ sessionId, isActive: false, users: 0 });
+  if (!session) return res.json({ sessionId, isActive: false, users: 0, isJoinable: false });
 
   // ✅ AUTHORITATIVE CHECK: If session is active but heartbeat is stale, auto-stop it
   if (session.isActive && session.lastHeartbeat) {
@@ -232,11 +264,34 @@ exports.getSessionStatus = async (req, res) => {
     }
   }
 
+  // Calculate Host Presence
+  let hostOnline = false;
+  if (session.isActive && session.hostLastHeartbeat) {
+    const timeSinceHostHeartbeat = Date.now() - new Date(session.hostLastHeartbeat).getTime();
+    hostOnline = timeSinceHostHeartbeat < HEARTBEAT_TIMEOUT_MS;
+  }
+
+  // Filter out stale users from the list (users who haven't heartbeated in 60s)
+  const activeUsers = (session.users || []).filter(u => {
+     // If we had a lastHeartbeat per user we would check it here. 
+     // For now, we return all users registered in the session.
+     return true; 
+  });
+
   res.json({
     sessionId,
     isActive: session.isActive,
+    hostOnline,
+    isJoinable: session.isActive && hostOnline,
+    isRecording: session.isActive && !!session.recordingActive,
+    participantCount: activeUsers.length,
+    participants: activeUsers.map(u => ({
+      userId: u.userId,
+      username: u.username,
+      role: u.role,
+      isSpeaking: u.isSpeaking
+    })),
     startedAt: session.startedAt,
-    users: session.users.length,
     lastHeartbeat: session.lastHeartbeat,
   });
 };
@@ -244,11 +299,24 @@ exports.getSessionStatus = async (req, res) => {
 exports.recordSpeakingEvent = async (req, res, next) => {
   try {
     const { userId, sessionId, start, end } = req.body;
-    if (userId === null || userId === undefined || !sessionId || !start || !end) {
+    if (!sessionId || !start || !end) {
       return res.status(400).json({ error: 'Missing required fields' });
     }
+
+    // SECURITY: Source of truth for identity is the authenticated user in the JWT
+    const authenticatedUserId = req.user.userId;
+
+    // Reject if the payload userId doesn't match the authenticated userId (unless host is logging for someone else, which isn't a current use case)
+    if (userId !== undefined && String(userId) !== String(authenticatedUserId)) {
+      console.warn(`🔐 Security Alert: User ${req.user.username} tried to log speaking event for user ID ${userId}`);
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'You can only log events for your own user identity.',
+      });
+    }
+
     const event = await SpeakingEvent.create({
-      userId: Number(userId),
+      userId: Number(authenticatedUserId), // Use authenticated ID
       sessionId: String(sessionId),
       start: new Date(start),
       end: new Date(end),
@@ -264,7 +332,14 @@ exports.listSpeakingEvents = async (req, res, next) => {
   try {
     const { userId, sessionId } = req.query;
     const filter = {};
-    if (userId) filter.userId = Number(userId);
+    
+    // SECURITY: Users can only see their own events. Hosts can see everything.
+    if (req.user.role !== 'host') {
+      filter.userId = req.user.userId;
+    } else if (userId) {
+      filter.userId = Number(userId);
+    }
+
     if (sessionId) filter.sessionId = String(sessionId);
     const docs = await SpeakingEvent.find(filter).sort({ start: 1 }).lean();
     res.json({ total: docs.length, events: docs });
