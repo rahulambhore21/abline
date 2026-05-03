@@ -1,0 +1,66 @@
+name: CI Quality Gate
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  backend:
+    name: Backend Lint & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: './backend/package-lock.json'
+          
+      - name: Install Dependencies
+        run: npm ci
+        
+      - name: Lint Check
+        run: npm run lint
+        
+      - name: Run Tests & Coverage
+        run: npm run test:coverage
+        env:
+          JWT_SECRET: ${{ secrets.JWT_SECRET || 'ci-test-secret' }}
+          MONGODB_URI: 'mongodb://localhost:27017/test'
+
+  frontend:
+    name: Flutter Analyze & Test
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app
+        
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.10.7'
+          channel: 'stable'
+          cache: true
+          
+      - name: Install Dependencies
+        run: flutter pub get
+        
+      - name: Static Analysis
+        run: flutter analyze
+        
+      - name: Run Unit Tests
+        run: flutter test --coverage
+        
+      - name: Build Verification (Web)
+        run: flutter build web --no-pub

@@ -5,8 +5,9 @@ import 'auth_service.dart';
 import 'home_screen.dart';
 import 'admin_screen.dart';
 import 'app_config.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
-void main() {
+Future<void> main() async {
   // Catch Flutter framework errors
   FlutterError.onError = (FlutterErrorDetails details) {
     FlutterError.presentError(details);
@@ -29,11 +30,24 @@ void main() {
     );
   };
 
-  runApp(
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = 'https://7c200378df530687f7a85e819bfd0b6f@o4511324775383040.ingest.us.sentry.io/4511324778397696';
+      // Set tracesSampleRate to 1.0 to capture 100% of transactions for tracing.
+      // We recommend adjusting this value in production.
+      options.tracesSampleRate = 1.0;
+      // The sampling rate for profiling is relative to tracesSampleRate
+      // Setting to 1.0 will profile 100% of sampled transactions:
+      options.profilesSampleRate = 1.0;
+    },
+    appRunner: () => runApp(SentryWidget(child: 
     const RestartWidget(
       child: MyApp(),
     ),
+  )),
   );
+  // TODO: Remove this line after sending the first sample event to sentry.
+  await Sentry.captureException(Exception('This is a sample exception.'));
 }
 
 /// A widget that allows restarting the entire application tree

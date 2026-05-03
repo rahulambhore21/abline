@@ -13,6 +13,6 @@ router.post('/webhook', recordingController.webhook);
 router.get('/', authMiddleware, recordingController.listRecordings);
 router.get('/active', authMiddleware, recordingController.activeRecordings);
 router.get('/session/:sessionId', authMiddleware, recordingController.listRecordings);
-router.get('/download/:recordingId', recordingController.downloadRecording);
+router.get('/download/:recordingId', authMiddleware, recordingController.downloadRecording);
 
 module.exports = router;

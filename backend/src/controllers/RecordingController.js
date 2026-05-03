@@ -224,6 +224,21 @@ exports.downloadRecording = async (req, res) => {
 
     if (!recording) return res.status(404).json({ error: 'Recording not found' });
 
+    // --- AUTHORIZATION CHECK ---
+    // Only allow the owner or a host to download the recording
+    const isOwner = req.user.username && recording.username && 
+                   req.user.username.toLowerCase() === recording.username.toLowerCase();
+    const isHost = req.user.role === 'host';
+
+    if (!isOwner && !isHost) {
+      console.warn(`🔐 Unauthorized download attempt: User ${req.user.username} tried to access recording ${recordingId} owned by ${recording.username}`);
+      return res.status(403).json({ 
+        error: 'Forbidden', 
+        message: 'You do not have permission to download this recording' 
+      });
+    }
+    // ----------------------------
+
     // Handle S3 Streaming (Primary Global Method)
     if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
       try {

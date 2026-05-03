@@ -59,34 +59,36 @@ app.use(errorHandler);
 // Start Server
 const start = async () => {
   try {
-    await connectDB();
-    const dbName = mongoose.connection.name;
-    const dbHost = mongoose.connection.host;
-    console.log(`📡 Connected to MongoDB: ${dbName} on ${dbHost}`);
+    const connected = await connectDB();
+    if (!connected) {
+      console.warn('⚠️ Starting server without MongoDB...');
+    } else {
+      const dbName = mongoose.connection.name;
+      const dbHost = mongoose.connection.host;
+      console.log(`📡 Connected to MongoDB: ${dbName} on ${dbHost}`);
+    }
     
-    // Initialize recording storage after DB is connected
-
+    // Initialize recording storage after DB attempt
     console.log('📦 S3 Configuration Status:', {
       bucket: process.env.RECORDING_BUCKET ? '✅ Set' : '❌ MISSING',
       region: process.env.RECORDING_REGION ? '✅ Set' : '❌ MISSING',
       accessKey: process.env.RECORDING_ACCESS_KEY ? '✅ Set' : '❌ MISSING',
     });
 
-    await recordingController.initializeRecordingsStorage();
-
-    // Initialize automatic cleanup of old recordings (7 days threshold)
-    const { initCleanupTask } = require('./src/services/CleanupService');
-    initCleanupTask();
-
-    // Perform a startup S3 connectivity test
     try {
-      const { uploadToS3 } = require('./src/services/S3Service');
-      const testFilename = `startup_test_${Date.now()}.txt`;
-      await uploadToS3(Buffer.from('connectivity test'), testFilename, 'text/plain');
-      console.log('✅ Global Persistence Test: S3 Connectivity Verified');
-    } catch (s3Error) {
-      console.error('⚠️ Global Persistence Test: S3 Connectivity Failed!', s3Error.message);
+      await recordingController.initializeRecordingsStorage();
+    } catch (err) {
+      console.warn('⚠️ Could not initialize recordings storage:', err.message);
     }
+
+    // Initialize automatic cleanup
+    try {
+      const { initCleanupTask } = require('./src/services/CleanupService');
+      initCleanupTask();
+    } catch (err) {
+      console.warn('⚠️ Could not initialize cleanup task:', err.message);
+    }
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
     });
@@ -96,4 +98,8 @@ const start = async () => {
   }
 };
 
-start();
+if (require.main === module) {
+  start();
+}
+
+module.exports = app;

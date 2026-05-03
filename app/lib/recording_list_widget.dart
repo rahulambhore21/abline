@@ -87,8 +87,11 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
   /// ✅ NEW: Verify if a recording exists (with feedback/logging)
   Future<bool> _verifyRecordingExists(Recording recording) async {
     try {
+      final token = await _authService.getToken();
+      final urlWithToken = '${recording.url}?token=${token ?? ''}';
+      
       final response = await http
-          .head(Uri.parse(recording.url))
+          .head(Uri.parse(urlWithToken))
           .timeout(const Duration(seconds: 5));
 
       final exists = response.statusCode == 200;

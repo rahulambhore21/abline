@@ -5,14 +5,21 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-key-change-in-pr
 const authMiddleware = (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    let token = '';
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+    } else if (req.query && req.query.token) {
+      token = req.query.token;
+    }
+
+    if (!token) {
       return res.status(401).json({
-        error: 'Missing or invalid Authorization header',
-        message: 'Expected format: Authorization: Bearer <token>',
+        error: 'Missing or invalid authentication',
+        message: 'Provide token via Authorization header or "token" query parameter',
       });
     }
 
-    const token = authHeader.slice(7);
     const decoded = jwt.verify(token, JWT_SECRET);
 
     req.user = {
