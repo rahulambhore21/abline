@@ -47,7 +47,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       // Fetch users count
       final usersResponse = await _authService
-          .authenticatedGet('${AppConfig.backendBaseUrl}/users');
+          .authenticatedGet('${AppConfig.backendBaseUrl}/auth/users');
       if (usersResponse.statusCode == 200) {
         final data = jsonDecode(usersResponse.body);
         setState(() => _totalUsers = (data['count'] ?? 0) as int);
@@ -63,7 +63,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       // Fetch speaking events
       final eventsResponse = await _authService
-          .authenticatedGet('${AppConfig.backendBaseUrl}/events/speaking');
+          .authenticatedGet('${AppConfig.backendBaseUrl}/session/events/speaking');
       if (eventsResponse.statusCode == 200) {
         final data = jsonDecode(eventsResponse.body);
         setState(() => _totalSpeakingEvents = (data['total'] ?? 0) as int);

@@ -151,7 +151,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _fetchHostName() async {
     try {
       final response = await _authService
-          .authenticatedGet('${AppConfig.backendBaseUrl}/host')
+          .authenticatedGet('${AppConfig.backendBaseUrl}/auth/host')
           .timeout(const Duration(seconds: 5));
 
       if (response.statusCode == 200) {

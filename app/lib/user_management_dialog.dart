@@ -36,13 +36,13 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
       return;
     }
 
-    if (_usernameController.text.length < 3) {
-      setState(() => _errorMessage = 'Username must be at least 3 characters');
+    if (_usernameController.text.length < 2) {
+      setState(() => _errorMessage = 'Username must be at least 2 characters');
       return;
     }
 
-    if (_passwordController.text.length < 6) {
-      setState(() => _errorMessage = 'Password must be at least 6 characters');
+    if (_passwordController.text.length < 4) {
+      setState(() => _errorMessage = 'Password must be at least 4 characters');
       return;
     }
 
@@ -95,7 +95,7 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
               controller: _usernameController,
               decoration: const InputDecoration(
                 labelText: 'Username',
-                hintText: 'At least 3 characters',
+                hintText: 'At least 2 characters',
                 border: OutlineInputBorder(),
                 prefixIcon: Icon(Icons.person),
               ),
@@ -108,7 +108,7 @@ class _UserManagementDialogState extends State<UserManagementDialog> {
               controller: _passwordController,
               decoration: InputDecoration(
                 labelText: 'Password',
-                hintText: 'At least 6 characters',
+                hintText: 'At least 4 characters',
                 border: const OutlineInputBorder(),
                 prefixIcon: const Icon(Icons.lock),
                 suffixIcon: IconButton(

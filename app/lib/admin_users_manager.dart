@@ -43,7 +43,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
       });
 
       final response = await _authService
-          .authenticatedGet('${AppConfig.backendBaseUrl}/users');
+          .authenticatedGet('${AppConfig.backendBaseUrl}/auth/users');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
