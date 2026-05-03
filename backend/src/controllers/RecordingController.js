@@ -252,14 +252,20 @@ exports.requestUploadUrl = async (req, res, next) => {
 };
 
 exports.downloadRecording = async (req, res) => {
+  const { recordingId } = req.params;
+  const { method } = req;
+  
   try {
-    const { recordingId } = req.params;
+    console.log(`📥 [${method}] Download request for recording: ${recordingId} from user: ${req.user?.username}`);
+    
     const recording = await Recording.findOne({ recordingId }).lean();
 
-    if (!recording) return res.status(404).json({ error: 'Recording not found' });
+    if (!recording) {
+      console.warn(`❌ Recording not found in DB: ${recordingId}`);
+      return res.status(404).json({ error: 'Recording not found' });
+    }
 
     // --- AUTHORIZATION CHECK ---
-    // Only allow the owner or a host to download the recording
     const isOwner =
       req.user.username &&
       recording.username &&
@@ -268,34 +274,46 @@ exports.downloadRecording = async (req, res) => {
 
     if (!isOwner && !isHost) {
       console.warn(
-        `🔐 Unauthorized download attempt: User ${req.user.username} tried to access recording ${recordingId} owned by ${recording.username}`
+        `🔐 Unauthorized access attempt: User ${req.user.username} tried to access recording ${recordingId} owned by ${recording.username}`
       );
       return res.status(403).json({
         error: 'Forbidden',
-        message: 'You do not have permission to download this recording',
+        message: 'You do not have permission to access this recording',
       });
     }
     // ----------------------------
 
-    // Handle S3 Streaming (Primary Global Method)
+    // Handle S3 Streaming
     if (recording.url && (recording.url.includes('s3') || recording.url.includes('amazonaws'))) {
       try {
         const { getS3FileStream } = require('../services/S3Service');
+        console.log(`📡 Fetching from S3: ${recording.filename}`);
+        
         const stream = await getS3FileStream(recording.filename);
 
         res.setHeader('Content-Type', 'audio/mp4');
         res.setHeader('Accept-Ranges', 'bytes');
+        
+        if (method === 'HEAD') {
+          console.log(`✅ [HEAD] File exists on S3: ${recording.filename}`);
+          return res.status(200).end();
+        }
+
         return stream.pipe(res);
       } catch (s3Error) {
-        console.error('❌ S3 Streaming failed, attempting direct redirect:', s3Error.message);
-        // Fallback to redirect if streaming fails
+        console.error(`❌ S3 Retrieval failed for ${recording.filename}:`, s3Error.message);
+        // If it's a HEAD request and S3 fails, return 404
+        if (method === 'HEAD') return res.status(404).end();
+        
+        console.log('🔄 Attempting direct redirect as fallback...');
         return res.redirect(recording.url);
       }
     }
 
+    console.warn(`⚠️ Recording has no valid S3 URL: ${recordingId}`);
     res.status(404).json({ error: 'Recording file not available on cloud storage' });
   } catch (error) {
-    console.error('❌ Download error:', error.message);
+    console.error(`❌ Download error for ${recordingId}:`, error.message);
     res.status(500).json({ error: 'Failed to download recording', message: error.message });
   }
 };

@@ -59,7 +59,10 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
     setState(() => _isVerifyingRecordings = true);
     
     for (final recording in widget.recordings) {
-      if (!_recordingExistenceCache.containsKey(recording.id)) {
+      // ✅ Use server-side verification if available, otherwise check manually
+      if (recording.exists != null) {
+        _recordingExistenceCache[recording.id] = recording.exists!;
+      } else if (!_recordingExistenceCache.containsKey(recording.id)) {
         await _verifyRecordingExists(recording);
       }
     }
@@ -93,8 +96,11 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
           .timeout(const Duration(seconds: 5));
 
       final exists = response.statusCode == 200;
-      debugPrint(
-          '${exists ? '✅' : '❌'} Recording ${exists ? 'exists' : 'NOT FOUND'} (HTTP ${response.statusCode})');
+      debugPrint('🔍 Existence check for ${recording.id}: ${response.statusCode}');
+      if (!exists) {
+        debugPrint('❌ Recording missing at: $proxyUrl');
+        debugPrint('📄 Response headers: ${response.headers}');
+      }
       
       // Update cache
       if (mounted) {
