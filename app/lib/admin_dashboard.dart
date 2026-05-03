@@ -86,8 +86,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   /// ✅ NEW: Start a call session (host goes live)
-  Future<void> _startCallSession() async {
-    if (_isStartingCall) return;
+  Future<bool> _startCallSessionInternal() async {
+    if (_isStartingCall) return false;
 
     setState(() {
       _isStartingCall = true;
@@ -95,217 +95,41 @@ class _AdminDashboardState extends State<AdminDashboard> {
     });
 
     try {
-      _currentSessionId = 'test_room'; // Using the same channel as VoiceCallScreen
-      
-      // Debug: Check token
-      final token = await _authService.getToken();
-      final role = await _authService.getRole();
-      debugPrint('🔐 Token exists: ${token != null}, Role: $role');
-      debugPrint('🌐 Starting call at: ${AppConfig.backendBaseUrl}/session/$_currentSessionId/start');
-
+      _currentSessionId = 'test_room';
       final response = await _authService.authenticatedPost(
         '${AppConfig.backendBaseUrl}/session/$_currentSessionId/start',
         body: {'sessionId': _currentSessionId},
       );
 
-      debugPrint('📡 Start session response: ${response.statusCode}');
-      debugPrint('📄 Response body: ${response.body}');
-
       if (response.statusCode == 200 || response.statusCode == 201) {
-        if (!mounted) return;
+        if (!mounted) return false;
         setState(() {
           _isHostLive = true;
           _isStartingCall = false;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Call session started! Users can now join.'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        return true;
       } else {
-        try {
-          final errorData = jsonDecode(response.body);
-          final errorMsg = errorData['error'] ?? 'Unknown error';
-          final errorDetail = errorData['message'] ?? '';
-          throw Exception('Failed to start session: $errorMsg - $errorDetail (Status: ${response.statusCode})');
-        } catch (e) {
-          throw Exception('Failed to start session: ${response.body} (Status: ${response.statusCode})');
-        }
+        throw Exception('Failed to start session: ${response.body}');
       }
     } catch (e) {
-      debugPrint('❌ Error starting session: $e');
-      if (!mounted) return;
+      if (!mounted) return false;
       setState(() {
         _error = 'Failed to start call: $e';
         _isStartingCall = false;
       });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
+      return false;
     }
+  }
+
+  Future<void> _handleJoinSession() async {
+    if (!_isHostLive) {
+      final success = await _startCallSessionInternal();
+      if (!success) return;
+    }
+    await _joinCall();
   }
 
   /// ✅ NEW: Stop the call session (host goes offline)
-  Future<void> _stopCallSession() async {
-    try {
-      final response = await _authService.authenticatedPost(
-        '${AppConfig.backendBaseUrl}/session/$_currentSessionId/stop',
-        body: {'sessionId': _currentSessionId},
-      );
-
-      if (response.statusCode == 200) {
-        if (!mounted) return;
-        setState(() {
-          _isHostLive = false;
-          _activeUsersInSession = 0;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Call session ended'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      } else {
-        throw Exception('Failed to stop session');
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = 'Failed to stop call: $e');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  /// ✅ NEW: Start recording the current session
-  Future<void> _startRecording() async {
-    if (_isTogatingRecording || !_isHostLive) return;
-
-    setState(() {
-      _isTogatingRecording = true;
-      _error = '';
-    });
-
-    try {
-      // Generate a random UID for the recorder (0 is commonly used)
-      const recorderUid = 0;
-
-      debugPrint('🎬 Starting recording for channel: $_currentSessionId');
-
-      final response = await _authService.authenticatedPost(
-        '${AppConfig.backendBaseUrl}/recording/start',
-        body: {
-          'channelName': _currentSessionId,
-          'uid': recorderUid,
-        },
-      );
-
-      debugPrint('📡 Start recording response: ${response.statusCode}');
-      debugPrint('📄 Response body: ${response.body}');
-
-      if (response.statusCode == 201 || response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        if (!mounted) return;
-        setState(() {
-          _isRecording = true;
-          _recordingResourceId = (data['resourceId'] ?? '') as String;
-          _recordingSid = (data['sid'] ?? '') as String;
-          _isTogatingRecording = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Recording started!'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      } else {
-        try {
-          final errorData = jsonDecode(response.body);
-          final errorMsg = errorData['error'] ?? 'Unknown error';
-          throw Exception('Failed to start recording: $errorMsg (Status: ${response.statusCode})');
-        } catch (e) {
-          throw Exception('Failed to start recording: ${response.body} (Status: ${response.statusCode})');
-        }
-      }
-    } catch (e) {
-      debugPrint('❌ Error starting recording: $e');
-      if (!mounted) return;
-      setState(() {
-        _error = 'Failed to start recording: $e';
-        _isTogatingRecording = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
-
-  /// ✅ NEW: Stop the current recording
-  Future<void> _stopRecording() async {
-    if (_isTogatingRecording || !_isRecording) return;
-
-    setState(() {
-      _isTogatingRecording = true;
-      _error = '';
-    });
-
-    try {
-      debugPrint('⏹️  Stopping recording for channel: $_currentSessionId');
-
-      final response = await _authService.authenticatedPost(
-        '${AppConfig.backendBaseUrl}/recording/stop',
-        body: {
-          'channelName': _currentSessionId,
-          'resourceId': _recordingResourceId,
-          'sid': _recordingSid,
-        },
-      );
-
-      debugPrint('📡 Stop recording response: ${response.statusCode}');
-      debugPrint('📄 Response body: ${response.body}');
-
-      if (response.statusCode == 200) {
-        if (!mounted) return;
-        setState(() {
-          _isRecording = false;
-          _recordingResourceId = '';
-          _recordingSid = '';
-          _isTogatingRecording = false;
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Recording stopped!'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      } else {
-        throw Exception('Failed to stop recording (Status: ${response.statusCode})');
-      }
-    } catch (e) {
-      debugPrint('❌ Error stopping recording: $e');
-      if (!mounted) return;
-      setState(() {
-        _error = 'Failed to stop recording: $e';
-        _isTogatingRecording = false;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('❌ Error: $e'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
-  }
 
   /// ✅ NEW: Check if the session is currently active on the server
   Future<void> _checkSessionStatus() async {
@@ -470,123 +294,56 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   // ✅ Session Controls
                   Row(
                     children: [
-                      if (!_isHostLive)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _startCallSession,
-                            icon: const Icon(Icons.bolt),
-                            label: const Text('Start Call Session'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.green,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _isStartingCall ? null : _handleJoinSession,
+                          icon: Icon(_isHostLive ? Icons.phone : Icons.bolt),
+                          label: Text(_isHostLive ? 'Join Call' : 'Start & Join Call'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isHostLive ? Colors.blue : Colors.green,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                         ),
-                      if (_isHostLive)
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _stopCallSession,
-                            icon: const Icon(Icons.stop),
-                            label: const Text('Stop Session'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.red,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                          ),
-                        ),
-                      if (_isHostLive) ...[
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton.icon(
-                            onPressed: _joinCall,
-                            icon: const Icon(Icons.phone),
-                            label: const Text('Join Call'),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ],
                   ),
 
-
                   const SizedBox(height: 24),
 
-                  // ✅ NEW: Recording Status Section
+                  // ✅ Auto-Recording Status (No manual buttons)
                   if (_isHostLive)
                     Container(
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: _isRecording ? Colors.red.shade900.withValues(alpha: 0.2) : Colors.grey.shade900.withValues(alpha: 0.2),
+                        color: _isRecording ? Colors.red.shade900.withValues(alpha: 0.1) : Colors.grey.shade900.withValues(alpha: 0.1),
                         border: Border.all(
-                          color: _isRecording ? Colors.red : Colors.grey,
-                          width: 1.5,
+                          color: _isRecording ? Colors.red.withValues(alpha: 0.5) : Colors.grey.withValues(alpha: 0.5),
+                          width: 1,
                         ),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              if (_isRecording)
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: Colors.red,
-                                  ),
-                                ),
-                              if (_isRecording) const SizedBox(width: 8),
-                              Text(
-                                _isRecording ? '🔴 RECORDING' : '⭕ READY TO RECORD',
-                                style: TextStyle(
-                                  color: _isRecording ? Colors.red : Colors.grey,
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
+                          if (_isRecording)
+                            const Icon(Icons.fiber_manual_record, color: Colors.red, size: 16),
+                          if (_isRecording) const SizedBox(width: 8),
+                          Text(
+                            _isRecording ? 'RECORDING ACTIVE' : 'RECORDING READY',
+                            style: TextStyle(
+                              color: _isRecording ? Colors.red : Colors.grey,
+                              fontSize: 13,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.1,
+                            ),
                           ),
-                          const SizedBox(height: 12),
-                          Column(
-                            children: [
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: _isRecording || _isTogatingRecording ? null : _startRecording,
-                                  icon: const Icon(Icons.fiber_manual_record),
-                                  label: const Text('Start Recording'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red,
-                                    foregroundColor: Colors.white,
-                                    disabledBackgroundColor: Colors.grey,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              SizedBox(
-                                width: double.infinity,
-                                child: ElevatedButton.icon(
-                                  onPressed: !_isRecording || _isTogatingRecording ? null : _stopRecording,
-                                  icon: const Icon(Icons.stop_circle),
-                                  label: const Text('Stop Recording'),
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.orange,
-                                    foregroundColor: Colors.white,
-                                    disabledBackgroundColor: Colors.grey,
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                  ),
-                                ),
-                              ),
-                            ],
+                          const Spacer(),
+                          const Text(
+                            '(Automatic)',
+                            style: TextStyle(color: Colors.white38, fontSize: 11),
                           ),
                         ],
                       ),
