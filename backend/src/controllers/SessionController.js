@@ -149,11 +149,15 @@ exports.startSession = async (req, res, next) => {
     const { id: sessionId } = req.params;
     const { userId, username } = req.user;
 
-    // ✅ FIX: userId from JWT is the Mongo ID (string). 
+    // ✅ FIX: userId from JWT is the Mongo ID (string).
     // Agora and our Recording schema expect a numeric UID.
     const numericUid = parseInt(userId, 10) || 1000;
 
-    const { session, recordingActive } = await startSessionInternal(sessionId, numericUid, username);
+    const { session, recordingActive } = await startSessionInternal(
+      sessionId,
+      numericUid,
+      username
+    );
 
     res.status(200).json({
       success: true,
