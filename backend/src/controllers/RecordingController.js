@@ -259,7 +259,7 @@ exports.downloadRecording = async (req, res) => {
     console.log(
       `📥 [${method}] Download request for recording: ${recordingId} from user: ${req.user?.username}`
     );
-    
+
     const recording = await Recording.findOne({ recordingId }).lean();
 
     if (!recording) {
