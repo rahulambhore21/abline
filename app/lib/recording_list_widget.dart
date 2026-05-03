@@ -392,28 +392,28 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
                               ),
                             ),
                             const SizedBox(height: 2),
-                            Row(
-                              children: [
-                                Text(
-                                  'Duration: $durationString',
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                    fontSize: 12,
-                                  ),
-                                ),
-                                if (_recordingExistenceCache[recording.id] == false) ...[
-                                  const SizedBox(width: 8),
-                                  const Text(
-                                    '• File Missing',
-                                    style: TextStyle(
-                                      color: Colors.orange,
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
+                             Wrap(
+                               crossAxisAlignment: WrapCrossAlignment.center,
+                               spacing: 8,
+                               children: [
+                                 Text(
+                                   'Duration: $durationString',
+                                   style: TextStyle(
+                                     color: Colors.white.withValues(alpha: 0.6),
+                                     fontSize: 12,
+                                   ),
+                                 ),
+                                 if (_recordingExistenceCache[recording.id] == false)
+                                   const Text(
+                                     '• File Missing',
+                                     style: TextStyle(
+                                       color: Colors.orange,
+                                       fontSize: 12,
+                                       fontWeight: FontWeight.bold,
+                                     ),
+                                   ),
+                               ],
+                             ),
 
                           ],
                         ),

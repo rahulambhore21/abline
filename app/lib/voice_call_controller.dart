@@ -736,7 +736,9 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
         throw Exception('Failed to get upload URL: ${responseUrl.statusCode}');
       }
       
-      final uploadUrl = jsonDecode(responseUrl.body)['uploadUrl'] as String;
+      final data = jsonDecode(responseUrl.body);
+      final uploadUrl = data['uploadUrl'] as String;
+      final serverFilename = data['filename'] as String; // ✅ Use the server-generated filename
 
       // 2. ✅ Streaming Upload DIRECTLY to S3 (Scale-Safe: Zero-RAM buffering)
       final request = http.StreamedRequest('PUT', Uri.parse(uploadUrl));
@@ -771,7 +773,7 @@ class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
           'sessionId': channelName,
           'durationMs': durationMs,
           'url': s3Url,
-          'filename': filename,
+          'filename': serverFilename, // ✅ FIX: Use the server-generated key (includes folder prefix)
         },
       ).timeout(const Duration(seconds: 15));
 
