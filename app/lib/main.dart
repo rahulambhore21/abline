@@ -311,6 +311,7 @@ class _AuthWrapperState extends State<AuthWrapper> {
   Future<void> _checkAuthentication() async {
     final isAuth = await _authService.isAuthenticated();
     final isHost = await _authService.isHost();
+    if (!mounted) return;
     setState(() {
       _isAuthenticated = isAuth;
       _isHost = isHost;
