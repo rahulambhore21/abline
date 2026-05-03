@@ -8,6 +8,7 @@ const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
 const fileUpload = require('express-fileupload');
+const logger = require('./src/utils/logger');
 const connectDB = require('./src/config/db');
 const errorHandler = require('./src/middleware/error');
 const { authMiddleware } = require('./src/middleware/auth');
@@ -33,11 +34,11 @@ const requiredEnv = [
 const missingEnv = requiredEnv.filter((env) => !process.env[env]);
 
 if (missingEnv.length > 0) {
-  console.error(`❌ FATAL: Missing required environment variables: ${missingEnv.join(', ')}`);
+  logger.error(`❌ FATAL: Missing required environment variables: ${missingEnv.join(', ')}`);
   if (process.env.NODE_ENV === 'production') {
     process.exit(1);
   } else {
-    console.warn('⚠️ Server will likely fail in production mode.');
+    logger.warn('⚠️ Server will likely fail in production mode.');
   }
 }
 
@@ -55,14 +56,48 @@ if (
   process.env.NODE_ENV === 'production' &&
   (!process.env.ALLOWED_ORIGINS || process.env.ALLOWED_ORIGINS === '*')
 ) {
-  console.warn('⚠️ SECURITY WARNING: CORS is wide open in production. Set ALLOWED_ORIGINS.');
+  logger.warn('⚠️ SECURITY WARNING: CORS is wide open in production. Set ALLOWED_ORIGINS.');
 }
 app.use(cors(corsOptions));
 
 app.use(compression());
-app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', { stream: logger.stream }));
 app.use(express.json());
 app.use(fileUpload());
+
+// --- HEALTH CHECK (Hardened) ---
+app.get('/health', async (req, res) => {
+  const health = {
+    status: 'UP',
+    timestamp: new Date(),
+    uptime: process.uptime(),
+    dependencies: {
+      mongodb: 'DOWN',
+      storage: 'UNKNOWN',
+    },
+    config: {
+      node_env: process.env.NODE_ENV,
+    }
+  };
+
+  try {
+    // Check DB
+    if (mongoose.connection.readyState === 1) {
+      health.dependencies.mongodb = 'UP';
+    }
+
+    // Check S3/Storage config
+    const hasS3 = !!(process.env.RECORDING_BUCKET && process.env.RECORDING_ACCESS_KEY);
+    health.dependencies.storage = hasS3 ? 'CONFIGURED' : 'MISSING';
+
+    const status = health.dependencies.mongodb === 'UP' ? 200 : 503;
+    res.status(status).json(health);
+  } catch (error) {
+    health.status = 'DOWN';
+    health.error = error.message;
+    res.status(500).json(health);
+  }
+});
 
 // --- MODULAR ROUTES ---
 app.use('/auth', authRoutes);
@@ -84,15 +119,15 @@ const start = async () => {
   try {
     const connected = await connectDB();
     if (!connected) {
-      console.warn('⚠️ Starting server without MongoDB...');
+      logger.warn('⚠️ Starting server without MongoDB...');
     } else {
       const dbName = mongoose.connection.name;
       const dbHost = mongoose.connection.host;
-      console.log(`📡 Connected to MongoDB: ${dbName} on ${dbHost}`);
+      logger.info(`📡 Connected to MongoDB: ${dbName} on ${dbHost}`);
     }
 
     // Initialize recording storage after DB attempt
-    console.log('📦 S3 Configuration Status:', {
+    logger.info('📦 S3 Configuration Status', {
       bucket: process.env.RECORDING_BUCKET ? '✅ Set' : '❌ MISSING',
       region: process.env.RECORDING_REGION ? '✅ Set' : '❌ MISSING',
       accessKey: process.env.RECORDING_ACCESS_KEY ? '✅ Set' : '❌ MISSING',
@@ -101,7 +136,7 @@ const start = async () => {
     try {
       await recordingController.initializeRecordingsStorage();
     } catch (err) {
-      console.warn('⚠️ Could not initialize recordings storage:', err.message);
+      logger.warn(`⚠️ Could not initialize recordings storage: ${err.message}`);
     }
 
     // Initialize automatic cleanup
@@ -109,14 +144,14 @@ const start = async () => {
       const { initCleanupTask } = require('./src/services/CleanupService');
       initCleanupTask();
     } catch (err) {
-      console.warn('⚠️ Could not initialize cleanup task:', err.message);
+      logger.warn(`⚠️ Could not initialize cleanup task: ${err.message}`);
     }
 
     app.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
+      logger.info(`🚀 Server running on port ${PORT}`);
     });
   } catch (error) {
-    console.error('❌ Failed to start server:', error.message);
+    logger.error(`❌ Failed to start server: ${error.message}`, { stack: error.stack });
     process.exit(1);
   }
 };

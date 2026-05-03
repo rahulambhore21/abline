@@ -102,7 +102,7 @@ exports.stopRecording = async (req, res, next) => {
 
 exports.listRecordings = async (req, res, next) => {
   try {
-    const { userId, verify } = req.query;
+    const { userId, verify, page = 1, limit = 50 } = req.query;
     // sessionId can come from query (?sessionId=...) or path params (/session/:sessionId)
     const sessionId = req.query.sessionId || req.params.sessionId;
     const shouldVerify = verify !== 'false';
@@ -125,9 +125,14 @@ exports.listRecordings = async (req, res, next) => {
       }
     }
 
-    console.log(`🔍 Listing recordings with filter:`, JSON.stringify(filter));
+    const skip = (Number(page) - 1) * Number(limit);
+    const totalCount = await Recording.countDocuments(filter);
 
-    let recordings = await Recording.find(filter).sort({ recordedAt: -1 }).lean();
+    let recordings = await Recording.find(filter)
+      .sort({ recordedAt: -1 })
+      .skip(skip)
+      .limit(Number(limit))
+      .lean();
 
     if (shouldVerify) {
       const verified = [];
@@ -165,7 +170,10 @@ exports.listRecordings = async (req, res, next) => {
     });
 
     res.json({
-      total: formattedRecordings.length,
+      total: totalCount,
+      page: Number(page),
+      limit: Number(limit),
+      totalPages: Math.ceil(totalCount / Number(limit)),
       recordings: formattedRecordings,
       byUser, // ✅ REQUIRED for Admin Dashboard
     });
@@ -173,6 +181,7 @@ exports.listRecordings = async (req, res, next) => {
     next(error);
   }
 };
+
 
 const crypto = require('crypto');
 

@@ -21,7 +21,7 @@ enum PresenceStatus { online, offline, reconnecting, waiting }
 /// All mutable state for the voice call, extracted from [VoiceCallScreen].
 ///
 /// Keeping business logic here makes the screen widget thin and testable.
-class VoiceCallController extends ChangeNotifier {
+class VoiceCallController extends ChangeNotifier with WidgetsBindingObserver {
   // ─── Config ───────────────────────────────────────────────────────────────
   final String channelName = 'test_room';
   final String agoraAppId = AppConfig.agoraAppId;
@@ -69,6 +69,7 @@ class VoiceCallController extends ChangeNotifier {
   Timer? _usernamesFetchTimer;
   Timer? _heartbeatTimer;
   Directory? _appDocDir;
+  AppLifecycleState? _lastState;
 
 
   static const int _tokenValidDuration = 3300;
@@ -77,6 +78,7 @@ class VoiceCallController extends ChangeNotifier {
   // ─── Initialisation ───────────────────────────────────────────────────────
 
   Future<void> init() async {
+    WidgetsBinding.instance.addObserver(this);
     authService = AuthService(backendUrl: backendUrl);
     audioRecorder = AudioRecorder();
     _appDocDir = await getApplicationDocumentsDirectory();
@@ -97,6 +99,53 @@ class VoiceCallController extends ChangeNotifier {
       statusMessage = 'Init failed: $e';
       onError?.call('Init error: $e');
       notifyListeners();
+    }
+  }
+
+  // ─── Lifecycle Handling ───────────────────────────────────────────────────
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    debugPrint('📱 App Lifecycle Changed: $_lastState -> $state');
+    _lastState = state;
+
+    switch (state) {
+      case AppLifecycleState.resumed:
+        _handleAppResumed();
+        break;
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.paused:
+        _handleAppBackgrounded();
+        break;
+      case AppLifecycleState.detached:
+      case AppLifecycleState.hidden:
+        _handleAppTerminated();
+        break;
+    }
+  }
+
+  void _handleAppResumed() {
+    debugPrint('🚀 App Resumed - Re-verifying session state');
+    if (isConnected) {
+      // Re-enable proximity sensor or other UI elements if needed
+      WakelockPlus.enable();
+    }
+    // Refresh session status immediately
+    unawaited(_checkSessionStatus());
+  }
+
+  void _handleAppBackgrounded() {
+    debugPrint('🌙 App Backgrounded - Maintaining session but preparing for potential suspension');
+    // We keep the call active in the background, but we might want to log this
+    // or ensure that the microphone is still active (handled by OS/Agora permissions)
+  }
+
+  void _handleAppTerminated() {
+    debugPrint('🛑 App Terminated/Detached - Emergency Cleanup');
+    // This is the last chance to clean up. Detached happens before termination.
+    // We don't await because the process is ending.
+    if (isConnected) {
+      leaveChannel();
     }
   }
 
@@ -212,6 +261,13 @@ class VoiceCallController extends ChangeNotifier {
         onTokenPrivilegeWillExpire: (RtcConnection connection, String token) {
           debugPrint('🎟️ Token will expire soon. Renewing...');
           _renewToken();
+        },
+        onConnectionStateChanged: (connection, state, reason) {
+          debugPrint('📡 Agora Connection State: $state, Reason: $reason');
+          if (state == ConnectionStateType.connectionStateFailed) {
+            statusMessage = 'Connection failed';
+            notifyListeners();
+          }
         },
       ),
     );
@@ -772,6 +828,7 @@ class VoiceCallController extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _stopSessionStatusPolling();
     _stopRecordingStatusPolling();
     _usernamesFetchTimer?.cancel();

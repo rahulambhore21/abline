@@ -21,59 +21,60 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
   bool _isLoading = true;
   String _error = '';
 
+  int _currentPage = 1;
+  bool _hasMore = true;
+  bool _isLoadingMore = false;
+
   @override
   void initState() {
     super.initState();
     _authService = AuthService(backendUrl: AppConfig.backendBaseUrl);
-    _loadRecordingData();
+    _loadRecordingData(refresh: true);
   }
 
-  @override
-  void dispose() {
-    super.dispose();
-  }
-
-  Future<void> _loadRecordingData() async {
-    try {
+  Future<void> _loadRecordingData({bool refresh = false}) async {
+    if (refresh) {
       setState(() {
+        _currentPage = 1;
+        _hasMore = true;
+        _recordingsByUser = {};
         _isLoading = true;
         _error = '';
       });
+    } else {
+      setState(() {
+        _isLoadingMore = true;
+      });
+    }
 
-      final recordingsResponse = await http
-          .get(Uri.parse('${AppConfig.backendBaseUrl}/recording/active'));
-      if (recordingsResponse.statusCode == 200) {
-        final data = jsonDecode(recordingsResponse.body);
-        setState(() {
-          _activeRecordings = List<Map<String, dynamic>>.from((data['recordings'] as Iterable?) ?? []);
-        });
+    try {
+      if (refresh) {
+        final activeResponse = await http
+            .get(Uri.parse('${AppConfig.backendBaseUrl}/recording/active'));
+        if (activeResponse.statusCode == 200) {
+          final data = jsonDecode(activeResponse.body);
+          setState(() {
+            _activeRecordings = List<Map<String, dynamic>>.from((data['recordings'] as Iterable?) ?? []);
+          });
+        }
       }
 
-      // ✅ NEW: Load all recordings by user for session
+      // ✅ NEW: Load recordings with pagination
       try {
         final userRecordingsResponse = await http.get(
-          Uri.parse('${AppConfig.backendBaseUrl}/recordings/session/test_room'),
+          Uri.parse('${AppConfig.backendBaseUrl}/recordings/session/test_room?page=$_currentPage&limit=50'),
           headers: {
             'Authorization': 'Bearer ${await _authService.getToken()}',
           },
         );
 
-        debugPrint('📡 Session recordings response: ${userRecordingsResponse.statusCode}');
-        debugPrint('📊 Response body: ${userRecordingsResponse.body}');
-
         if (userRecordingsResponse.statusCode == 200) {
           final data = jsonDecode(userRecordingsResponse.body);
-          debugPrint('📝 Total recordings in response: ${data['total']}');
-          debugPrint('📝 Recording count by user: ${data['byUser']?.keys.length ?? 0}');
-
-          final recordingsList = (data['recordings'] as List?)
-              ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
-              .toList() ?? [];
-
-          // ✅ FIXED: Keep userId as String (don't convert to int)
-          final byUser = (data['byUser'] as Map?)?.map(
+          final totalPages = (data['totalPages'] ?? 1) as int;
+          
+          final byUserRaw = (data['byUser'] as Map?)?.map(
             (userId, recordings) => MapEntry(
-              userId.toString(), // Keep as string
+              userId.toString(),
               (recordings as List)
                   .map((r) => Recording.fromJson(r as Map<String, dynamic>))
                   .toList(),
@@ -81,31 +82,37 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
           ) ?? {};
 
           setState(() {
-            _recordingsByUser = byUser;
+            // Merge into existing _recordingsByUser
+            byUserRaw.forEach((userId, newRecs) {
+              if (_recordingsByUser.containsKey(userId)) {
+                _recordingsByUser[userId]!.addAll(newRecs);
+              } else {
+                _recordingsByUser[userId] = newRecs;
+              }
+            });
+            
+            _hasMore = _currentPage < totalPages;
+            if (_hasMore) _currentPage++;
+            _isLoading = false;
+            _isLoadingMore = false;
           });
-
-          debugPrint('✅ Loaded ${recordingsList.length} session recordings');
-          debugPrint('✅ Users with recordings: ${byUser.keys.toList()}');
-          debugPrint('📋 Sample recording: ${recordingsList.isNotEmpty ? recordingsList.first.url : "None"}');
-        } else {
-          debugPrint('⚠️ Session recordings response: ${userRecordingsResponse.statusCode}');
-          debugPrint('📄 Body: ${userRecordingsResponse.body}');
         }
       } catch (e) {
         debugPrint('❌ Error loading user recordings: $e');
-        debugPrint('   Stack: ${StackTrace.current}');
-        // Don't treat this as a fatal error
       }
 
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
-      setState(() {
-        _error = 'Error loading recording data: $e';
-        _isLoading = false;
-      });
-      debugPrint('❌ Error in _loadRecordingData: $e');
+      if (mounted) {
+        setState(() {
+          _error = 'Error loading recording data: $e';
+          _isLoading = false;
+          _isLoadingMore = false;
+        });
+      }
     }
   }
+
 
   // _showSnackBar was unreferenced
 
@@ -433,8 +440,39 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
                   );
                 }).toList(),
               ),
+
+            if (_hasMore)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 24),
+                child: Center(
+                  child: ElevatedButton.icon(
+                    onPressed: _isLoadingMore ? null : () => _loadRecordingData(),
+                    icon: _isLoadingMore 
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                        : const Icon(Icons.arrow_downward),
+                    label: Text(_isLoadingMore ? 'Loading...' : 'Load More Recordings'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.grey[800],
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                    ),
+                  ),
+                ),
+              ),
+            
+            if (!_hasMore && _recordingsByUser.isNotEmpty)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 32),
+                child: Center(
+                  child: Text(
+                    'No more recordings available',
+                    style: TextStyle(color: Colors.white30, fontSize: 13),
+                  ),
+                ),
+              ),
           ],
         ],
       ),
     );
+
 }

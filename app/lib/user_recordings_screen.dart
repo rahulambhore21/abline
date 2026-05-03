@@ -24,36 +24,60 @@ class UserRecordingsScreen extends StatefulWidget {
 class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
   late AuthService _authService;
   late final String _backendUrl = AppConfig.backendBaseUrl;
+  final ScrollController _scrollController = ScrollController();
 
   List<Recording> _recordings = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
+  int _currentPage = 1;
+  bool _hasMore = true;
   String _error = '';
 
   @override
   void initState() {
     super.initState();
     _authService = AuthService(backendUrl: _backendUrl);
-    _loadRecordings();
+    _loadRecordings(refresh: true);
+    _scrollController.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScroll);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScroll() {
+    if (_scrollController.position.pixels >= _scrollController.position.maxScrollExtent - 200) {
+      if (!_isLoading && !_isLoadingMore && _hasMore) {
+        _loadRecordings();
+      }
+    }
   }
 
   /// ✅ Load user's recordings from backend
-  Future<void> _loadRecordings() async {
-    try {
+  Future<void> _loadRecordings({bool refresh = false}) async {
+    if (refresh) {
       setState(() {
+        _currentPage = 1;
+        _hasMore = true;
+        _recordings = [];
         _isLoading = true;
         _error = '';
       });
+    } else {
+      setState(() {
+        _isLoadingMore = true;
+      });
+    }
 
-      // ✅ FIXED: Use session-based endpoint instead of user-based
-      // This works because recordings are tied to sessions, not MongoDB user IDs
-      // ✅ NEW: Enable verification to filter out non-existent recordings
-      // ✅ FIXED: Pass userId to ensure segregation
-      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true';
+    try {
+      final url = '$_backendUrl/recordings?sessionId=${widget.sessionId}&userId=${widget.userId}&verify=true&page=$_currentPage&limit=20';
       debugPrint('🌐 Fetching recordings from: $url');
 
       final token = await _authService.getToken();
       
-      // Fetch recordings
       final response = await http
           .get(
             Uri.parse(url),
@@ -63,44 +87,29 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
           )
           .timeout(const Duration(seconds: 10));
 
-      debugPrint('📡 Response status: ${response.statusCode}');
-      debugPrint('📄 Response body: ${response.body}');
-
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final recordings = (data['recordings'] as List?)
+        final newRecordings = (data['recordings'] as List?)
             ?.map((r) => Recording.fromJson(r as Map<String, dynamic>))
             .toList() ?? [];
 
-        final verified = (data['verified'] ?? recordings.length) as int;
-        debugPrint('✅ Loaded $verified verified recordings out of ${data['total']}');
-
+        final totalPages = (data['totalPages'] ?? 1) as int;
+        
         if (mounted) {
           setState(() {
-            _recordings = recordings;
+            _recordings.addAll(newRecordings);
             _isLoading = false;
+            _isLoadingMore = false;
+            _hasMore = _currentPage < totalPages;
+            if (_hasMore) _currentPage++;
           });
-        }
-
-        // Show a subtle message if some recordings were removed
-        if (verified < ((data['total'] ?? 0) as int)) {
-          if (mounted && context.mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  '🗑️ Removed ${(data['total'] ?? 0) - verified} orphaned recordings',
-                ),
-                backgroundColor: Colors.orange.shade700,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
         }
       } else {
         if (mounted) {
           setState(() {
             _error = 'Failed to load recordings: ${response.statusCode}';
             _isLoading = false;
+            _isLoadingMore = false;
           });
         }
       }
@@ -110,6 +119,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         setState(() {
           _error = 'Error loading recordings: $e';
           _isLoading = false;
+          _isLoadingMore = false;
         });
       }
     }
@@ -128,7 +138,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: _loadRecordings,
+            onPressed: () => _loadRecordings(refresh: true),
             tooltip: 'Refresh',
           ),
         ],
@@ -158,7 +168,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
                       ),
                       const SizedBox(height: 24),
                       ElevatedButton(
-                        onPressed: _loadRecordings,
+                        onPressed: () => _loadRecordings(refresh: true),
                         child: const Text('Retry'),
                       ),
                     ],
@@ -193,40 +203,39 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
                         ],
                       ),
                     )
-                  : SingleChildScrollView(
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${_recordings.length} Recording${_recordings.length != 1 ? 's' : ''}',
-                                  style: const TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                const SizedBox(height: 16),
-                                // Use the existing RecordingListWidget for playback
-                                RecordingListWidget(
-                                  recordings: _recordings,
-                                  backendUrl: _backendUrl,
-                                  onVerificationComplete: (verifiedList) {
-                                    // ✅ NEW: Update state if verification found missing files
-                                    if (verifiedList.length != _recordings.length) {
-                                      setState(() {
-                                        _recordings = verifiedList;
-                                      });
-                                    }
-                                  },
-                                ),
-                              ],
+                  : ListView(
+                      controller: _scrollController,
+                      padding: const EdgeInsets.all(16),
+                      children: [
+                        Text(
+                          '${_recordings.length} Recording${_recordings.length != 1 ? 's' : ''}',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        RecordingListWidget(
+                          recordings: _recordings,
+                          backendUrl: _backendUrl,
+                        ),
+                        if (_isLoadingMore)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(child: CircularProgressIndicator()),
+                          ),
+                        if (!_hasMore && _recordings.isNotEmpty)
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 20),
+                            child: Center(
+                              child: Text(
+                                'No more recordings to load',
+                                style: TextStyle(color: Colors.white30, fontSize: 12),
+                              ),
                             ),
                           ),
-                        ],
-                      ),
+                      ],
                     ),
     );
 }
+
