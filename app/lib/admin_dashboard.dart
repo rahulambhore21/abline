@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -209,8 +210,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
         final data = jsonDecode(response.body);
         setState(() {
           _isRecording = true;
-          _recordingResourceId = data['resourceId'] ?? '';
-          _recordingSid = data['sid'] ?? '';
+          _recordingResourceId = (data['resourceId'] ?? '') as String;
+          _recordingSid = (data['sid'] ?? '') as String;
           _isTogatingRecording = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
@@ -307,7 +308,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        setState(() => _activeUsersInSession = data['total'] ?? 0);
+        setState(() => _activeUsersInSession = (data['total'] ?? 0) as int);
       }
     } catch (e) {
       print('Error checking active users: $e');
@@ -325,8 +326,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
-          _isHostLive = data['isActive'] ?? false;
-          _activeUsersInSession = data['userCount'] ?? 0;
+          _isHostLive = (data['isActive'] ?? false) as bool;
+          _activeUsersInSession = (data['userCount'] ?? 0) as int;
         });
       }
     } catch (e) {
@@ -340,12 +341,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
       print('🎤 Host joining call as participant...');
       if (!mounted) return;
       
-      Navigator.push(
+      unawaited(Navigator.push(
         context,
-        MaterialPageRoute(
+        MaterialPageRoute<void>(
           builder: (context) => const VoiceCallScreen(),
         ),
-      );
+      ));
     } catch (e) {
       print('❌ Error joining call: $e');
       ScaffoldMessenger.of(context).showSnackBar(
@@ -696,7 +697,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
+                              MaterialPageRoute<void>(
                                 builder: (context) => const AdminRecordingsScreen(
                                   sessionId: 'test_room',
                                 ),
@@ -757,7 +758,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                           onPressed: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
+                              MaterialPageRoute<void>(
                                 builder: (context) => const AdminRecordingsScreen(
                                   sessionId: 'test_room',
                                 ),

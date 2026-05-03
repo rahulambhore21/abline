@@ -48,7 +48,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
         final data = jsonDecode(response.body);
         if (mounted) {
           setState(() {
-            _users = List<Map<String, dynamic>>.from(data['users'] ?? []);
+            _users = List<Map<String, dynamic>>.from((data['users'] as Iterable?) ?? []);
             _isLoading = false;
           });
         }
@@ -433,7 +433,7 @@ class _AdminUsersManagerState extends State<AdminUsersManager> {
 /// Dedicated dialog to manage its own TextEditingController lifecycle
 class _DeleteConfirmDialog extends StatefulWidget {
   final String username;
-  final Function(String, bool) onSnackBar;
+  final void Function(String, bool) onSnackBar;
 
   const _DeleteConfirmDialog({
     required this.username,

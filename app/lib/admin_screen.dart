@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'auth_service.dart';
 import 'app_config.dart';
@@ -43,7 +44,7 @@ class _AdminScreenState extends State<AdminScreen>
       if (!isHost) {
         // Not a host, redirect to home
         if (mounted) {
-          Navigator.pushReplacementNamed(context, '/home');
+          unawaited(Navigator.pushReplacementNamed(context, '/home'));
         }
         return;
       }
@@ -65,12 +66,12 @@ class _AdminScreenState extends State<AdminScreen>
   Future<void> _handleLogout() async {
     await _authService.logout();
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed('/login');
+      unawaited(Navigator.of(context).pushReplacementNamed('/login'));
     }
   }
 
   void _showLogoutConfirmation() {
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Logout'),
@@ -89,7 +90,7 @@ class _AdminScreenState extends State<AdminScreen>
           ),
         ],
       ),
-    );
+    ));
   }
 
   @override

@@ -144,7 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   /// Show logout confirmation dialog
   void _showLogoutConfirmation() {
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Logout'),
@@ -326,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? () {
                                   Navigator.push(
                                     context,
-                                    MaterialPageRoute(
+                                    MaterialPageRoute<void>(
                                       builder: (context) => const VoiceCallScreen(),
                                     ),
                                   );
@@ -357,7 +357,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(
+                            MaterialPageRoute<void>(
                               builder: (context) => const UserRecordingsScreen(
                                 sessionId: 'test_room',
                               ),
@@ -429,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           onTap: () {
                             Navigator.push(
                               context,
-                              MaterialPageRoute(
+                              MaterialPageRoute<void>(
                                 builder: (context) => const AdminRecordingsScreen(
                                   sessionId: 'test_room',
                                 ),

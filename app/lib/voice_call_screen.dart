@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'voice_call_controller.dart';
 import 'call_controls_bar.dart';
@@ -142,7 +143,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
               onExitRoom: () => _handleExit(context),
               onRecordingsTap: () => Navigator.push(
                 context,
-                MaterialPageRoute(
+                MaterialPageRoute<void>(
                   builder: (_) => UserRecordingsScreen(
                     sessionId: _ctrl.channelName,
                     userId: _ctrl.uid,
@@ -195,7 +196,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
 
   Future<void> _handleExit(BuildContext context) async {
     // Show a small overlay to prevent interaction while leaving
-    showDialog(
+    unawaited(showDialog<void>(
       context: context,
       barrierDismissible: false,
       builder: (context) => const Center(
@@ -215,7 +216,7 @@ class _VoiceCallScreenState extends State<VoiceCallScreen> {
           ],
         ),
       ),
-    );
+    ));
 
     try {
       await _ctrl.leaveChannel();

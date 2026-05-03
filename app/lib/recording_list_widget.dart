@@ -9,7 +9,7 @@ import 'package:audio_session/audio_session.dart'; // ✅ NEW
 class RecordingListWidget extends StatefulWidget {
   final List<Recording> recordings;
   final String backendUrl;
-  final Function(List<Recording>)? onVerificationComplete;
+  final void Function(List<Recording>)? onVerificationComplete;
 
   const RecordingListWidget({
     super.key,
@@ -134,7 +134,7 @@ class _RecordingListWidgetState extends State<RecordingListWidget> {
 
       await session.setActive(true);
       // Give the system a moment to switch routes
-      await Future.delayed(const Duration(milliseconds: 200));
+      await Future<void>.delayed(const Duration(milliseconds: 200));
 
 
       // Ensure player volume is at maximum

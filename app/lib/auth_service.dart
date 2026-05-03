@@ -292,7 +292,7 @@ class AuthService {
   }
 
   /// Make authenticated HTTP POST request
-  Future<http.Response> authenticatedPost(String url, {Map? body}) async {
+  Future<http.Response> authenticatedPost(String url, {Map<String, dynamic>? body}) async {
     final token = await getToken();
     
     return http.post(

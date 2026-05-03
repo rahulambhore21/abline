@@ -46,7 +46,7 @@ class _AdminRecordingManagerState extends State<AdminRecordingManager> {
       if (recordingsResponse.statusCode == 200) {
         final data = jsonDecode(recordingsResponse.body);
         setState(() {
-          _activeRecordings = List<Map<String, dynamic>>.from(data['recordings'] ?? []);
+          _activeRecordings = List<Map<String, dynamic>>.from((data['recordings'] as Iterable?) ?? []);
         });
       }
 

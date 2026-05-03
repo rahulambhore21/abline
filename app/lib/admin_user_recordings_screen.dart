@@ -7,7 +7,7 @@ class AdminUserRecordingsScreen extends StatelessWidget {
   final String username;
   final List<Recording> recordings;
   final String backendUrl;
-  final Function(List<Recording>) onVerificationComplete;
+  final void Function(List<Recording>) onVerificationComplete;
 
   const AdminUserRecordingsScreen({
     super.key,

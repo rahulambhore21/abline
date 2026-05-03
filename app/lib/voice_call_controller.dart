@@ -152,7 +152,7 @@ class VoiceCallController extends ChangeNotifier {
       await agoraEngine.setEnableSpeakerphone(false);
       isSpeakerOn = false;
     } catch (e) {
-      print('⚠️ Audio routing setup warning: $e');
+      debugPrint('⚠️ Audio routing setup warning: $e');
     }
     
     _setupEventHandlers();
@@ -257,7 +257,7 @@ class VoiceCallController extends ChangeNotifier {
         if (wasActive && !active && isConnected) {
           debugPrint('🚪 Host ended call. Disconnecting...');
           unawaited(leaveChannel()); // ✅ NEW: Force leave locally
-          onHostLeft?.call();
+          unawaited(onHostLeft?.call());
         }
       }
     } catch (_) {
@@ -287,7 +287,7 @@ class VoiceCallController extends ChangeNotifier {
         notifyListeners();
       }
     } catch (e) {
-      print('❌ Error starting session: $e');
+      debugPrint('❌ Error starting session: $e');
     }
   }
 
@@ -307,7 +307,7 @@ class VoiceCallController extends ChangeNotifier {
       isSessionActive = false;
       notifyListeners();
     } catch (e) {
-      print('❌ Error stopping session: $e');
+      debugPrint('❌ Error stopping session: $e');
     }
   }
 
@@ -352,7 +352,7 @@ class VoiceCallController extends ChangeNotifier {
   // ─── Join / Leave ─────────────────────────────────────────────────────────
 
   Future<void> _autoJoinCall() async {
-    await Future.delayed(const Duration(milliseconds: 1000));
+    await Future<void>.delayed(const Duration(milliseconds: 1000));
     if (isConnected || isJoining) return;
     if (isHost) {
       await startSessionOnBackend();
@@ -434,8 +434,8 @@ class VoiceCallController extends ChangeNotifier {
     notifyListeners();
     
     // Fire and forget (mostly) to avoid lag, but handle errors
-    unawaited(agoraEngine.muteLocalAudioStream(false).catchError((e) {
-      print('Error unmuting: $e');
+    unawaited(agoraEngine.muteLocalAudioStream(false).catchError((Object e) {
+      debugPrint('Error unmuting: $e');
     }));
     
     if (!isHost && !isRecordingAudio) {
@@ -450,8 +450,8 @@ class VoiceCallController extends ChangeNotifier {
     isMuted = true;
     notifyListeners();
     
-    unawaited(agoraEngine.muteLocalAudioStream(true).catchError((e) {
-      print('Error muting: $e');
+    unawaited(agoraEngine.muteLocalAudioStream(true).catchError((Object e) {
+      debugPrint('Error muting: $e');
     }));
     
     if (!isHost && isRecordingAudio) {
@@ -552,7 +552,7 @@ class VoiceCallController extends ChangeNotifier {
         
         onError?.call(errorMsg);
       } else {
-        print('⚠️ Failed to register user in session: ${response.statusCode}');
+        debugPrint('⚠️ Failed to register user in session: ${response.statusCode}');
       }
     } catch (_) {}
   }

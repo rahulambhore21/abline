@@ -172,7 +172,7 @@ class _UserRecordingsScreenState extends State<UserRecordingsScreen> {
                           Icon(
                             Icons.mic_none,
                             size: 64,
-                            color: Colors.white.withOpacity(0.3),
+                            color: Colors.white.withValues(alpha: 0.3),
                           ),
                           const SizedBox(height: 16),
                           const Text(

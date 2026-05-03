@@ -238,7 +238,7 @@ class _AdminRecordingsScreenState extends State<AdminRecordingsScreen> {
                               return InkWell(
                                 onTap: () => Navigator.push(
                                   context,
-                                  MaterialPageRoute(
+                                  MaterialPageRoute<void>(
                                     builder: (context) =>
                                         AdminUserRecordingsScreen(
                                       username: username,
